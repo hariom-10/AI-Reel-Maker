@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# Local media storage (ignore actual video payloads)
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend/data/exports/*
+!backend/data/exports/.gitkeep
+backend/data/thumbnails/*
+!backend/data/thumbnails/.gitkeep
+backend/data/temp/*
+!backend/data/temp/.gitkeep
+backend/data/projects/*
+!backend/data/projects/.gitkeep
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.env
+frontend/.env.*
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Test artifacts
+sample_test.mp4
+workflow_test.mp4
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,12 +1,13 @@
-import os
 import subprocess
 import logging
 import zipfile
-import shutil
+import uuid
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 from config import FFMPEG_BIN, EXPORTS_DIR, TEMP_DIR
 from models import ClipConfig, Project, CropConfig, CaptionConfig, BlurRegion
+from services.ffmpeg_runner import run_ffmpeg
 from services.transcriber import generate_ass_subtitle_file
 
 logger = logging.getLogger(__name__)
@@ -63,12 +64,17 @@ def build_filter_graph(
     # Optional user-selected blur region for personal footage/privacy
     if crop_config.blur_region and crop_config.blur_region.width > 0 and crop_config.blur_region.height > 0:
         reg = crop_config.blur_region
-        rx = int(target_w * (reg.x / 100.0))
-        ry = int(target_h * (reg.y / 100.0))
-        rw = max(10, int(target_w * (reg.width / 100.0)))
-        rh = max(10, int(target_h * (reg.height / 100.0)))
-        # Delogo / boxblur over that patch
-        blur_patch = f"{current_pad}delogo=x={rx}:y={ry}:w={rw}:h={rh}[blurred]"
+        rx = min(target_w - 10, max(0, int(target_w * (reg.x / 100.0))))
+        ry = min(target_h - 10, max(0, int(target_h * (reg.y / 100.0))))
+        rw = max(10, min(target_w - rx, int(target_w * (reg.width / 100.0))))
+        rh = max(10, min(target_h - ry, int(target_h * (reg.height / 100.0))))
+        blur_strength = max(1, min(100, crop_config.blur_strength))
+        blur_patch = (
+            f"{current_pad}split[blur_base][blur_source];"
+            f"[blur_source]crop={rw}:{rh}:{rx}:{ry},"
+            f"boxblur={blur_strength}:2[blur_patch];"
+            f"[blur_base][blur_patch]overlay={rx}:{ry}[blurred]"
+        )
         filters.append(blur_patch)
         current_pad = "[blurred]"
 
@@ -91,6 +97,7 @@ def render_clip(
     target_w, target_h = RESOLUTION_MAP.get(clip.crop_config.aspect_ratio, (1080, 1920))
     output_filename = f"{project_id}_{clip.clip_id}.mp4"
     output_path = EXPORTS_DIR / output_filename
+    temp_output_path = EXPORTS_DIR / f"{project_id}_{clip.clip_id}_{uuid.uuid4().hex}.tmp.mp4"
 
     # Subtitle ASS generation
     ass_path = None
@@ -135,33 +142,40 @@ def render_clip(
         "-ar", "48000",
         "-r", "30",
         "-movflags", "+faststart",
-        str(output_path)
+        str(temp_output_path)
     ]
 
     try:
         if progress_callback:
             progress_callback(20, f"Rendering {clip.title}...")
 
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        run_ffmpeg(cmd, clip_duration, progress_callback)
         
-        if output_path.exists() and output_path.stat().st_size > 1000:
+        if temp_output_path.exists() and temp_output_path.stat().st_size > 1000:
+            if progress_callback:
+                progress_callback(100, f"Completed {clip.title}")
+            temp_output_path.replace(output_path)
             clip.status = "exported"
             clip.output_path = str(output_path)
             clip.output_url = f"/media/exports/{output_filename}"
-            if progress_callback:
-                progress_callback(100, f"Completed {clip.title}")
         else:
             clip.status = "error"
             clip.error_message = "Output file is empty or corrupted."
+    except InterruptedError:
+        clip.status = "ready"
+        clip.error_message = "Rendering cancelled."
+        raise
     except subprocess.CalledProcessError as e:
-        logger.error(f"FFmpeg render error for {clip.clip_id}: {e.stderr}")
+        logger.error("FFmpeg render error for %s: %s", clip.clip_id, e.output)
         clip.status = "error"
-        clip.error_message = f"Render failed: {e.stderr[-300:] if e.stderr else 'unknown error'}"
+        clip.error_message = f"Render failed: {e.output[-300:] if e.output else 'unknown error'}"
     except Exception as e:
         logger.error(f"Render exception: {e}")
         clip.status = "error"
         clip.error_message = str(e)
     finally:
+        if temp_output_path.exists():
+            temp_output_path.unlink()
         # Clean up temporary ASS file
         if ass_path and ass_path.exists():
             try:
@@ -179,9 +193,11 @@ def create_export_zip(project_id: str, clips: List[ClipConfig]) -> Optional[str]
     exported_files = []
     for clip in clips:
         if clip.status == "exported" and clip.output_path:
-            p = Path(clip.output_path)
-            if p.exists():
-                exported_files.append((p, f"{clip.clip_id}_{clip.title.replace(' ', '_')}.mp4"))
+            p = Path(clip.output_path).resolve()
+            if p.is_relative_to(EXPORTS_DIR.resolve()) and p.exists():
+                safe_id = re.sub(r"[^A-Za-z0-9._-]+", "_", clip.clip_id).strip("._")
+                safe_title = re.sub(r"[^A-Za-z0-9._-]+", "_", clip.title).strip("._")
+                exported_files.append((p, f"{safe_id or 'clip'}_{safe_title or 'clip'}.mp4"))
 
     if not exported_files:
         return None

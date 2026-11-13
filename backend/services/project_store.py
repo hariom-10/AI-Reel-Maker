@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -14,9 +15,13 @@ class ProjectStore:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_path(self, project_id: str) -> Path:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project_id):
+            raise ValueError("Invalid project ID.")
         return self.storage_dir / f"{project_id}.json"
 
     def save_project(self, project: Project) -> Project:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project.id):
+            raise ValueError("Invalid project ID.")
         project.updated_at = datetime.now().isoformat()
         path = self._get_path(project.id)
         with open(path, "w", encoding="utf-8") as f:
@@ -24,7 +29,10 @@ class ProjectStore:
         return project
 
     def get_project(self, project_id: str) -> Optional[Project]:
-        path = self._get_path(project_id)
+        try:
+            path = self._get_path(project_id)
+        except ValueError:
+            return None
         if not path.exists():
             return None
         try:
@@ -48,18 +56,23 @@ class ProjectStore:
 
     def delete_project(self, project_id: str) -> bool:
         project = self.get_project(project_id)
+        if not project:
+            return False
         path = self._get_path(project_id)
         if path.exists():
             path.unlink()
         
         # Cleanup associated video files if exists
         if project and project.video_path:
-            video_file = Path(project.video_path)
-            if video_file.exists() and video_file.is_file():
+            video_file = Path(project.video_path).resolve()
+            uploads_root = UPLOADS_DIR.resolve()
+            if video_file.is_relative_to(uploads_root) and video_file.exists() and video_file.is_file():
                 try:
                     video_file.unlink()
                 except Exception as e:
                     logger.warning(f"Failed to delete video file {video_file}: {e}")
+            else:
+                logger.warning("Skipped deleting project source outside the uploads directory.")
 
         return True
 
@@ -67,8 +80,11 @@ class ProjectStore:
         projects = self.list_projects()
         total_videos = len(projects)
         total_clips = sum(len(p.clips) for p in projects)
-        processing = sum(1 for p in projects if p.status in ["analyzing", "exporting"])
-        completed = sum(1 for p in projects if p.status in ["completed", "ready"])
+        processing = sum(
+            1 for p in projects
+            if p.status in ["analyzing", "generating", "cleaning", "exporting"]
+        )
+        completed = sum(1 for p in projects if p.status == "completed")
 
         return {
             "total_videos": total_videos,

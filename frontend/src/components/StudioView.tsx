@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Play, Pause, Crop, Type, Scissors, ShieldAlert, Sparkles, Download, Check,
-  Smartphone, Square, Monitor, Palette, ArrowLeft, RefreshCw, Loader2, Eye
+  Smartphone, Square, Monitor, Palette, ArrowLeft, RefreshCw, Loader2, Eye,
+  Undo2, Redo2, Save
 } from 'lucide-react';
 import { Project, ClipConfig, SubtitleItem } from '../types';
 import { api } from '../services/api';
@@ -25,6 +26,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [isRendering, setIsRendering] = useState(false);
   const [renderMessage, setRenderMessage] = useState<string | null>(null);
+
+  // Undo / Redo history stacks
+  const [undoStack, setUndoStack] = useState<ClipConfig[]>([]);
+  const [redoStack, setRedoStack] = useState<ClipConfig[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
@@ -73,17 +78,39 @@ export const StudioView: React.FC<StudioViewProps> = ({
     }
   };
 
-  const handleUpdateClip = async (updated: ClipConfig) => {
+  const applyClipState = async (targetClip: ClipConfig) => {
     const updatedClips = [...clips];
-    updatedClips[activeClipIndex] = updated;
-    const updatedProject = { ...project, clips: updatedClips };
-    onUpdateProject(updatedProject);
-
+    updatedClips[activeClipIndex] = targetClip;
+    onUpdateProject({ ...project, clips: updatedClips });
     try {
-      await api.updateClip(project.id, updated.clip_id, updated);
+      await api.updateClip(project.id, targetClip.clip_id, targetClip);
     } catch (e) {
-      console.error('Failed to sync clip update to backend:', e);
+      console.error(e);
     }
+  };
+
+  const handleUpdateClip = async (updated: ClipConfig) => {
+    if (currentClip) {
+      setUndoStack((prev) => [...prev.slice(-20), currentClip]);
+      setRedoStack([]);
+    }
+    await applyClipState(updated);
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0 || !currentClip) return;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, currentClip]);
+    applyClipState(previous);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0 || !currentClip) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [...prev, currentClip]);
+    applyClipState(next);
   };
 
   const handleRenderSingleClip = async () => {
@@ -182,11 +209,31 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
 
         {/* Studio Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-1 px-1.5 py-1 rounded-xl bg-slate-900 border border-slate-800">
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer"
+              title="Undo edit"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer"
+              title="Redo edit"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <button
             onClick={handleRenderSingleClip}
             disabled={isRendering}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs tracking-wide border border-slate-700 transition cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs tracking-wide border border-slate-700 transition cursor-pointer disabled:opacity-50"
           >
             {isRendering ? (
               <>
@@ -196,19 +243,30 @@ export const StudioView: React.FC<StudioViewProps> = ({
             ) : currentClip.status === 'exported' ? (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Re-Render Reel</span>
+                <span>Re-Render</span>
               </>
             ) : (
               <>
                 <Play className="w-3.5 h-3.5 text-violet-400 fill-violet-400" />
-                <span>Render This Reel</span>
+                <span>Render Reel</span>
               </>
             )}
           </button>
 
+          {currentClip.output_url && (
+            <a
+              href={currentClip.output_url}
+              download
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/30 text-xs font-semibold transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download MP4</span>
+            </a>
+          )}
+
           <button
             onClick={onOpenBatchExport}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-md shadow-violet-600/30 transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-md shadow-violet-600/30 transition cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Batch Export All</span>

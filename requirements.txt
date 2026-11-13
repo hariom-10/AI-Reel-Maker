@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+aiofiles>=23.2
+numpy>=1.26
+Pillow>=10.2
+opencv-python-headless>=4.9
+scenedetect>=0.6

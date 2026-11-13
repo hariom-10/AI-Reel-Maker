@@ -11,8 +11,10 @@ import numpy as np
 
 from config import FFMPEG_BIN, FFPROBE_BIN, THUMBNAILS_DIR
 from models import VideoMetadata, DetectedScene
+from services.ffmpeg_runner import run_ffmpeg
 
 logger = logging.getLogger(__name__)
+PYSCENEDETECT_MAX_DURATION = 10 * 60
 
 def detect_subject_focal_x(video_path: Path, timestamp: float) -> float:
     """
@@ -98,27 +100,29 @@ def probe_video(video_path: Path) -> VideoMetadata:
         format_name = format_info.get("format_name", "mp4").split(",")[0]
         size_bytes = int(format_info.get("size", video_path.stat().st_size if video_path.exists() else 0))
 
-        return VideoMetadata(
-            duration=duration,
-            width=width,
-            height=height,
-            fps=fps,
-            bitrate=bitrate,
-            codec=codec,
-            format_name=format_name,
-            size_bytes=size_bytes
-        )
-    except Exception as e:
-        logger.error(f"Error probing video {video_path}: {e}")
-        # Fallback metadata
-        size = video_path.stat().st_size if video_path.exists() else 0
-        return VideoMetadata(
-            duration=60.0,
-            width=1920,
-            height=1080,
-            fps=30.0,
-            size_bytes=size
-        )
+    except (OSError, ValueError, subprocess.SubprocessError, json.JSONDecodeError) as e:
+        logger.error("Could not probe video %s: %s", video_path, e)
+        raise ValueError("The uploaded file is not a readable video.") from e
+
+    if (
+        not video_stream
+        or not math.isfinite(duration)
+        or duration <= 0
+        or width <= 0
+        or height <= 0
+    ):
+        raise ValueError("The uploaded file does not contain a valid video stream.")
+
+    return VideoMetadata(
+        duration=duration,
+        width=width,
+        height=height,
+        fps=fps,
+        bitrate=bitrate,
+        codec=codec,
+        format_name=format_name,
+        size_bytes=size_bytes
+    )
 
 def extract_thumbnail(video_path: Path, timestamp: float, output_path: Path) -> bool:
     """Extract a single high-quality frame thumbnail at timestamp."""
@@ -139,8 +143,12 @@ def extract_thumbnail(video_path: Path, timestamp: float, output_path: Path) -> 
         logger.warning(f"Thumbnail extraction failed at {timestamp}s: {e}")
         return False
 
-def analyze_audio_activity(video_path: Path, duration: float) -> List[Dict[str, float]]:
-    """Detect voice and dialogue segments by running silence detection."""
+def analyze_audio_activity(
+    video_path: Path,
+    duration: float,
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+) -> List[Dict[str, float]]:
+    """Estimate active audio intervals by detecting silence."""
     cmd = [
         FFMPEG_BIN,
         "-i", str(video_path),
@@ -150,8 +158,12 @@ def analyze_audio_activity(video_path: Path, duration: float) -> List[Dict[str, 
     ]
     silence_segments = []
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        output = proc.stderr
+        output = run_ffmpeg(
+            cmd,
+            duration,
+            progress_callback,
+            loglevel="info",
+        )
 
         silence_starts = [float(m.group(1)) for m in re.finditer(r"silence_start:\s*([0-9.]+)", output)]
         silence_ends = [float(m.group(1)) for m in re.finditer(r"silence_end:\s*([0-9.]+)", output)]
@@ -161,8 +173,11 @@ def analyze_audio_activity(video_path: Path, duration: float) -> List[Dict[str, 
                 "start": silence_starts[i],
                 "end": silence_ends[i]
             })
+    except InterruptedError:
+        raise
     except Exception as e:
         logger.warning(f"Audio silence detection error: {e}")
+        return []
 
     # Invert silence segments to get active dialogue/sound intervals
     active_segments = []
@@ -176,7 +191,12 @@ def analyze_audio_activity(video_path: Path, duration: float) -> List[Dict[str, 
 
     return active_segments
 
-def detect_scenes_ffmpeg(video_path: Path, duration: float, threshold: float = 0.26) -> List[float]:
+def detect_scenes_ffmpeg(
+    video_path: Path,
+    duration: float,
+    threshold: float = 0.26,
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+) -> List[float]:
     """Detect visual scene changes using FFmpeg's optimized scene filter."""
     cmd = [
         FFMPEG_BIN,
@@ -187,14 +207,16 @@ def detect_scenes_ffmpeg(video_path: Path, duration: float, threshold: float = 0
     ]
     timestamps = [0.0]
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        for line in proc.stderr.splitlines():
+        diagnostics = run_ffmpeg(cmd, duration, progress_callback, loglevel="info")
+        for line in diagnostics.splitlines():
             if "pts_time:" in line:
                 match = re.search(r"pts_time:([0-9.]+)", line)
                 if match:
                     ts = float(match.group(1))
                     if ts > timestamps[-1] + 1.5:  # Minimum 1.5s between scene cuts
                         timestamps.append(ts)
+    except InterruptedError:
+        raise
     except Exception as e:
         logger.warning(f"FFmpeg scene detection warning: {e}")
 
@@ -238,7 +260,7 @@ def analyze_video_scenes(
 ) -> List[DetectedScene]:
     """
     Comprehensive multi-modal scene analysis.
-    Identifies visual transitions, speech intervals, and engagement heuristics.
+    Identifies visual transitions, active audio intervals, and ranking heuristics.
     """
     if progress_callback:
         progress_callback(10, "Extracting video metadata...")
@@ -246,16 +268,28 @@ def analyze_video_scenes(
     duration = metadata.duration
 
     if progress_callback:
-        progress_callback(30, "Analyzing audio dynamics and speech patterns...")
-    active_audio_segments = analyze_audio_activity(video_path, duration)
+        progress_callback(30, "Analyzing audio activity...")
+    def audio_progress(percent: int, _message: str):
+        if progress_callback:
+            progress_callback(30 + int(percent * 0.2), "Analyzing audio activity...")
+
+    active_audio_segments = analyze_audio_activity(video_path, duration, audio_progress)
 
     if progress_callback:
         progress_callback(55, "Detecting visual scene boundaries...")
     
-    # Try PySceneDetect first, fallback seamlessly to native FFmpeg filter
-    cut_timestamps = detect_scenes_pyscenedetect(video_path)
+    # Keep cancellation and progress responsive for long sources.
+    cut_timestamps = (
+        detect_scenes_pyscenedetect(video_path)
+        if duration <= PYSCENEDETECT_MAX_DURATION
+        else None
+    )
     if not cut_timestamps or len(cut_timestamps) < 2:
-        cut_timestamps = detect_scenes_ffmpeg(video_path, duration)
+        def scene_progress(percent: int, _message: str):
+            if progress_callback:
+                progress_callback(55 + int(percent * 0.2), "Detecting visual scene changes...")
+
+        cut_timestamps = detect_scenes_ffmpeg(video_path, duration, progress_callback=scene_progress)
 
     # Ensure boundaries wrap cleanly
     if not cut_timestamps:
@@ -296,7 +330,7 @@ def analyze_video_scenes(
 
         scene_id = f"scene_{idx + 1:03d}"
         
-        # Calculate dialogue density for this scene window
+        # Estimate active audio duration; this is not speech recognition.
         scene_audio_len = 0.0
         for aud in active_audio_segments:
             overlap_start = max(start_t, aud["start"])
@@ -305,14 +339,10 @@ def analyze_video_scenes(
                 scene_audio_len += (overlap_end - overlap_start)
         dialogue_density = min(1.0, round(scene_audio_len / max(0.1, scene_dur), 2))
 
-        # Audio activity score
         audio_activity = round(0.4 + (dialogue_density * 0.6), 2)
 
-        # Visual activity score (shorter cuts & moderate scene transitions indicate higher pacing)
         visual_activity = round(min(1.0, max(0.3, 1.0 - (scene_dur / 60.0) + 0.2)), 2)
 
-        # Overall composite engagement score
-        # Balances dialogue presence (45%), visual pace (35%), and ideal short-form duration (20%)
         duration_penalty = 1.0 if 10.0 <= scene_dur <= 45.0 else 0.8
         score = round(((dialogue_density * 0.45) + (visual_activity * 0.35) + 0.2) * duration_penalty, 2)
         score = min(0.98, max(0.35, score))
@@ -323,10 +353,15 @@ def analyze_video_scenes(
         thumb_path = THUMBNAILS_DIR / thumb_filename
         extract_thumbnail(video_path, midpoint, thumb_path)
         thumb_url = f"/media/thumbnails/{thumb_filename}"
+        if progress_callback:
+            progress_callback(
+                75 + int(((idx + 1) / max(total_cuts, 1)) * 24),
+                f"Scoring scene {idx + 1} of {total_cuts}...",
+            )
 
         summary = f"Moment {idx + 1} • {scene_dur}s"
         if dialogue_density > 0.6:
-            summary += " • High Speech"
+            summary += " • High Audio Activity"
         elif visual_activity > 0.7:
             summary += " • High Action"
 

@@ -5,6 +5,7 @@ import { DashboardView } from './components/DashboardView';
 import { UploadModal } from './components/UploadModal';
 import { SceneInspector } from './components/SceneInspector';
 import { StudioView } from './components/StudioView';
+import { VideoCleanupView } from './components/VideoCleanupView';
 import { ReelGeneratorModal } from './components/ReelGeneratorModal';
 import { BatchExportModal } from './components/BatchExportModal';
 import { ProjectsView } from './components/ProjectsView';
@@ -12,7 +13,7 @@ import { VideoLibraryView } from './components/VideoLibraryView';
 import { SettingsView } from './components/SettingsView';
 import { VideoPreviewModal } from './components/VideoPreviewModal';
 
-import { Project, DashboardStats, GenerateReelsParams, ClipConfig } from './types';
+import { Project, DashboardStats, GenerateReelsParams } from './types';
 import { api } from './services/api';
 
 export function App() {
@@ -20,6 +21,11 @@ export function App() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+
+  // Theme state: dark / light
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('theme') !== 'light';
+  });
 
   // Studio Sub-view: "scenes" (AI Scene Inspector) vs "editor" (Vertical Studio)
   const [studioSubView, setStudioSubView] = useState<'scenes' | 'editor'>('scenes');
@@ -32,6 +38,15 @@ export function App() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingReels, setIsGeneratingReels] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+
+  const toggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      localStorage.setItem('theme', next ? 'dark' : 'light');
+      return next;
+    });
+  };
 
   // Initial Data Fetch
   const loadInitialData = async () => {
@@ -40,7 +55,6 @@ export function App() {
       setStats(s);
       setProjects(p);
 
-      // If no project active yet, default to most recent if available
       if (!currentProject && p.length > 0) {
         setCurrentProject(p[0]);
       }
@@ -53,18 +67,27 @@ export function App() {
     loadInitialData();
   }, []);
 
-  // Poll active project if analyzing or exporting
+  // Poll active background processing jobs.
+  const activeProjectId = currentProject?.id;
+  const activeProjectStatus = currentProject?.status;
   useEffect(() => {
-    if (!currentProject) return;
-    if (currentProject.status === 'analyzing' || currentProject.status === 'exporting') {
+    if (!activeProjectId || !activeProjectStatus) return;
+    const wasGenerating = activeProjectStatus === 'generating';
+    const isBusy = ['analyzing', 'generating', 'cleaning', 'exporting'].includes(activeProjectStatus);
+    if (isBusy) {
       const interval = setInterval(async () => {
         try {
-          const updated = await api.getProject(currentProject.id);
+          const updated = await api.getProject(activeProjectId);
           setCurrentProject(updated);
-          if (updated.status !== 'analyzing') {
-            setIsAnalyzing(false);
+          if (updated.status === 'ready' && wasGenerating) {
+            setIsGeneratingReels(false);
+            setIsReelGenOpen(false);
+            setNoticeMessage(updated.status_message);
+            if (updated.clips.length > 0) setStudioSubView('editor');
+            api.getStats().then(setStats);
           }
-          // Refresh list as well
+          if (updated.status !== 'analyzing') setIsAnalyzing(false);
+          if (updated.status !== 'generating') setIsGeneratingReels(false);
           const p = await api.listProjects();
           setProjects(p);
         } catch (e) {
@@ -73,7 +96,7 @@ export function App() {
       }, 1500);
       return () => clearInterval(interval);
     }
-  }, [currentProject?.id, currentProject?.status]);
+  }, [activeProjectId, activeProjectStatus]);
 
   // Handler when a video is freshly uploaded
   const handleProjectUploaded = (project: Project) => {
@@ -81,7 +104,6 @@ export function App() {
     setProjects((prev) => [project, ...prev.filter((p) => p.id !== project.id)]);
     setCurrentTab('studio');
     setStudioSubView('scenes');
-    // Trigger automatic AI scene analysis
     handleStartAnalysis(project.id);
   };
 
@@ -93,9 +115,26 @@ export function App() {
       await api.triggerAnalysis(id);
       const updated = await api.getProject(id);
       setCurrentProject(updated);
+      setNoticeMessage(updated.status_message);
     } catch (err: any) {
       console.error('Analysis trigger failed:', err);
+      setNoticeMessage(`Analysis could not start: ${err.message}`);
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleCancelCurrentJob = async () => {
+    if (!currentProject) return;
+    try {
+      await api.cancelJob(currentProject.id);
+      setIsAnalyzing(false);
+      setIsGeneratingReels(false);
+      const updated = await api.getProject(currentProject.id);
+      setCurrentProject(updated);
+      setNoticeMessage(updated.status_message);
+    } catch (e) {
+      console.error(e);
+      setNoticeMessage('Could not cancel the processing job.');
     }
   };
 
@@ -103,16 +142,17 @@ export function App() {
     if (!currentProject) return;
     try {
       setIsGeneratingReels(true);
-      const updated = await api.generateReels(currentProject.id, params);
-      setCurrentProject(updated);
-      setIsGeneratingReels(false);
-      setIsReelGenOpen(false);
-      // Switch directly to Vertical Studio editor
-      setStudioSubView('editor');
-      // Refresh stats
-      api.getStats().then(setStats);
+      const result = await api.generateReels(currentProject.id, params);
+      setCurrentProject(result.project);
+      setNoticeMessage(result.message);
+      if (result.project.status !== 'generating') {
+        setIsGeneratingReels(false);
+        setIsReelGenOpen(false);
+        if (result.project.clips.length > 0) setStudioSubView('editor');
+      }
     } catch (err: any) {
       console.error('Reel generation failed:', err);
+      setNoticeMessage(`Reel generation failed: ${err.message}`);
       setIsGeneratingReels(false);
     }
   };
@@ -120,7 +160,6 @@ export function App() {
   const handleOpenProject = (project: Project) => {
     setCurrentProject(project);
     setCurrentTab('studio');
-    // If clips already generated, open editor directly, otherwise scene inspector
     if (project.clips && project.clips.length > 0) {
       setStudioSubView('editor');
     } else {
@@ -141,6 +180,11 @@ export function App() {
               ? 'Multi-Modal Scene Detection & Moment Selection'
               : 'Interactive 9:16 Vertical Video & Subtitles Editor',
         };
+      case 'cleanup':
+        return {
+          title: 'AI Video Cleanup',
+          subtitle: 'Authorized, non-destructive region edits with preview and export',
+        };
       case 'projects':
         return { title: 'My Projects', subtitle: 'Manage locally saved video reels projects' };
       case 'library':
@@ -148,14 +192,14 @@ export function App() {
       case 'settings':
         return { title: 'Settings', subtitle: 'Local FFmpeg and AI processing parameters' };
       default:
-        return { title: 'AI Reel Maker', subtitle: '' };
+        return { title: 'AI Reel Maker Pro', subtitle: '' };
     }
   };
 
   const headerInfo = getHeaderInfo();
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#090D16] text-slate-100 font-sans">
+    <div className={`flex h-screen w-screen overflow-hidden font-sans ${isDarkMode ? 'dark bg-[#090D16] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -170,6 +214,8 @@ export function App() {
           }
         }}
         activeProjectName={currentProject?.name}
+        isDarkMode={isDarkMode}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
@@ -181,6 +227,37 @@ export function App() {
           onNewProject={() => setIsUploadOpen(true)}
           isProcessing={isAnalyzing || isGeneratingReels}
         />
+
+        {noticeMessage && (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-4 border-b border-sky-500/20 bg-sky-500/10 px-8 py-3 text-xs text-sky-100"
+          >
+            <span>{noticeMessage}</span>
+            <button
+              onClick={() => setNoticeMessage(null)}
+              className="shrink-0 text-sky-300 underline hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Cancellation Bar if job is busy */}
+        {currentProject && ['analyzing', 'generating', 'cleaning', 'exporting'].includes(currentProject.status) && (
+          <div className="px-8 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              {currentProject.status_message} ({currentProject.progress}%)
+            </span>
+            <button
+              onClick={handleCancelCurrentJob}
+              className="text-amber-200 underline hover:text-white font-bold cursor-pointer"
+            >
+              Cancel Job
+            </button>
+          </div>
+        )}
 
         {/* Dynamic Views */}
         <main className="flex-1 overflow-y-auto">
@@ -216,7 +293,6 @@ export function App() {
                       );
                       const updated = { ...currentProject, scenes: updatedScenes };
                       setCurrentProject(updated);
-                      api.updateClip(currentProject.id, '', {} as any).catch(() => {});
                     }}
                     onSelectAll={(selected) => {
                       const updatedScenes = currentProject.scenes.map((s) => ({ ...s, selected }));
@@ -230,7 +306,7 @@ export function App() {
                     }}
                     onOpenReelGenerator={() => setIsReelGenOpen(true)}
                     onReAnalyze={() => handleStartAnalysis()}
-                    isAnalyzing={isAnalyzing}
+                    isAnalyzing={isAnalyzing || isGeneratingReels}
                   />
                 </div>
               ) : (
@@ -241,6 +317,30 @@ export function App() {
                   onOpenBatchExport={() => setIsBatchExportOpen(true)}
                   onBackToScenes={() => setStudioSubView('scenes')}
                 />
+              )}
+            </div>
+          )}
+
+          {currentTab === 'cleanup' && (
+            <div>
+              {currentProject ? (
+                <VideoCleanupView
+                  key={currentProject.id}
+                  project={currentProject}
+                  onUpdateProject={(p) => setCurrentProject(p)}
+                  onPreviewVideo={(url, title) => setPreviewModalData({ url, title })}
+                />
+              ) : (
+                <div className="p-12 text-center text-slate-400 space-y-3">
+                  <p className="text-base font-bold text-white">No Video Project Selected for Cleanup</p>
+                  <p className="text-xs">Please select or upload a video project first.</p>
+                  <button
+                    onClick={() => setIsUploadOpen(true)}
+                    className="px-4 py-2 bg-violet-600 text-white text-xs rounded-xl font-bold"
+                  >
+                    Upload Video
+                  </button>
+                </div>
               )}
             </div>
           )}

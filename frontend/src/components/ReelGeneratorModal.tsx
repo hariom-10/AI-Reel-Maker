@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Clock, Sliders, Smartphone, Square, Monitor, Type, CheckCircle } from 'lucide-react';
+import { X, Sparkles, Clock, Sliders, Smartphone, Square, Monitor, Type } from 'lucide-react';
 import { GenerateReelsParams } from '../types';
 
 interface ReelGeneratorModalProps {
@@ -53,7 +53,7 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Generate Viral Reels</h3>
+              <h3 className="text-base font-bold text-white">Generate Reels</h3>
               <p className="text-xs text-slate-400 font-medium">Automatic multi-clip extraction with smart timing</p>
             </div>
           </div>
@@ -119,7 +119,7 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
           </div>
 
           {/* Target Clip Count */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="flex justify-between items-center text-xs font-semibold">
               <span className="text-slate-300 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-indigo-400" />
@@ -127,16 +127,38 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
               </span>
               <span className="text-violet-400 font-mono font-bold">{targetCount} clips</span>
             </div>
+
+            {/* Quick Presets: 10, 20, 30, Custom */}
+            <div className="grid grid-cols-4 gap-2">
+              {[10, 20, 30].map((cnt) => (
+                <button
+                  type="button"
+                  key={cnt}
+                  onClick={() => setTargetCount(cnt)}
+                  className={`py-1.5 px-3 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    targetCount === cnt
+                      ? 'bg-violet-600 text-white shadow-md'
+                      : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {cnt} Clips
+                </button>
+              ))}
+              <div className="flex items-center justify-center text-xs font-mono font-bold text-violet-400 bg-violet-500/10 rounded-xl border border-violet-500/30">
+                {targetCount} Total
+              </div>
+            </div>
+
             <input
               type="range"
               min="1"
-              max={Math.max(10, Math.min(25, totalScenes))}
+              max="30"
               value={targetCount}
               onChange={(e) => setTargetCount(Number(e.target.value))}
-              className="w-full accent-violet-500 cursor-pointer"
+              className="w-full accent-violet-500 cursor-pointer pt-1"
             />
             <p className="text-[11px] text-slate-400">
-              AI will rank top {targetCount} candidate moments from {totalScenes} detected scenes.
+              Ranks selected scenes using audio and scene-duration heuristics. {totalScenes} analyzed moments are available.
             </p>
           </div>
 

@@ -1,7 +1,7 @@
 import logging
 import math
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 from models import DetectedScene, ClipConfig, CropConfig, CaptionConfig, SubtitleItem
 from services.transcriber import generate_captions_for_clip
 from services.video_analyzer import extract_thumbnail
@@ -20,11 +20,12 @@ def generate_automatic_reels(
     mode: str = "smart_crop",
     auto_captions: bool = True,
     caption_language: str = "en",
-    caption_style: str = "bold_outline"
+    caption_style: str = "bold_outline",
+    progress_callback: Optional[Callable[[int, str], None]] = None,
 ) -> List[ClipConfig]:
     """
-    Intelligently select top-performing moments and generate reel candidate clips.
-    Aligns with scene boundaries and dialogue flows to prevent abrupt cuts.
+    Rank selected moments using audio-activity and scene-duration heuristics.
+    Clip boundaries follow scene windows where possible; dialogue is not transcribed here.
     """
     if not scenes or video_duration <= 0:
         return []
@@ -53,7 +54,7 @@ def generate_automatic_reels(
         scene_len = scene.duration
         if scene_len >= target_duration:
             # If scene is already long, pick the most active center section
-            start = round(scene.start_time, 2)
+            start = round(scene.start_time + (scene_len - target_duration) / 2.0, 2)
             end = round(min(video_duration, start + target_duration), 2)
         else:
             # Need to expand window to reach target_duration
@@ -85,32 +86,18 @@ def generate_automatic_reels(
             "scene_id": scene.scene_id
         })
 
-    # If we still have fewer candidates than requested, populate from remaining timeline
-    if len(candidate_windows) < target_count:
-        step = max(target_duration, video_duration / max(1, target_count))
-        cur = 0.0
-        while cur + 5.0 < video_duration and len(candidate_windows) < target_count:
-            start = round(cur, 2)
-            end = round(min(video_duration, start + target_duration), 2)
-            
-            # Check overlap
-            if not any(abs(start - cw["start"]) < min_separation for cw in candidate_windows):
-                candidate_windows.append({
-                    "start": start,
-                    "end": end,
-                    "duration": round(end - start, 2),
-                    "score": 0.70,
-                    "scene_id": f"scene_auto_{len(candidate_windows)+1}"
-                })
-            cur += step
-
     # Sort final candidate windows chronologically
     candidate_windows = sorted(candidate_windows[:target_count], key=lambda c: c["start"])
 
     clips: List[ClipConfig] = []
     for idx, cw in enumerate(candidate_windows, 1):
+        if progress_callback:
+            progress_callback(
+                int(((idx - 1) / len(candidate_windows)) * 100),
+                f"Preparing clip {idx} of {len(candidate_windows)}...",
+            )
         clip_id = f"reel_{idx:02d}"
-        title = f"Viral Short #{idx} ({cw['duration']}s)"
+        title = f"Suggested Short #{idx} ({cw['duration']}s)"
 
         crop_config = CropConfig(
             aspect_ratio=aspect_ratio,
@@ -135,7 +122,8 @@ def generate_automatic_reels(
             subtitles = generate_captions_for_clip(
                 start_time=cw["start"],
                 end_time=cw["end"],
-                language=caption_language
+                language=caption_language,
+                video_path=video_path
             )
 
         # Generate thumbnail for reel
@@ -157,5 +145,10 @@ def generate_automatic_reels(
             subtitles=subtitles,
             status="ready"
         ))
+        if progress_callback:
+            progress_callback(
+                int((idx / len(candidate_windows)) * 100),
+                f"Prepared clip {idx} of {len(candidate_windows)}.",
+            )
 
     return clips

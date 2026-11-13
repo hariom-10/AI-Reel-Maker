@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, CheckSquare, Square, Volume2, Eye, Play, SlidersHorizontal, RefreshCw } from 'lucide-react';
+import { Sparkles, CheckSquare, Square, Volume2, Eye, Play, RefreshCw } from 'lucide-react';
 import { DetectedScene, Project } from '../types';
 
 interface SceneInspectorProps {
@@ -21,13 +21,13 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
   onReAnalyze,
   isAnalyzing,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'high_speech' | 'high_action' | 'selected'>('all');
+  const [filter, setFilter] = useState<'all' | 'high_audio' | 'high_action' | 'selected'>('all');
 
   const scenes = project.scenes || [];
 
   const filteredScenes = scenes.filter((scene) => {
     if (filter === 'selected') return scene.selected;
-    if (filter === 'high_speech') return scene.dialogue_density >= 0.5;
+    if (filter === 'high_audio') return scene.audio_activity >= 0.7;
     if (filter === 'high_action') return scene.visual_activity >= 0.5;
     return true;
   });
@@ -85,7 +85,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
       {/* Filter Chips & Selection Bar */}
       <div className="flex items-center justify-between px-2">
         <div className="flex items-center gap-2">
-          {(['all', 'high_speech', 'high_action', 'selected'] as const).map((tab) => (
+          {(['all', 'high_audio', 'high_action', 'selected'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
@@ -160,7 +160,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                     {formatTimestamp(scene.start_time)} - {formatTimestamp(scene.end_time)} ({scene.duration}s)
                   </div>
 
-                  {/* Viral Score Badge */}
+                  {/* Relative moment score badge */}
                   <div className="absolute top-2 right-2">
                     <span
                       className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase backdrop-blur-md ${
@@ -169,7 +169,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                           : 'bg-black/70 text-slate-300'
                       }`}
                     >
-                      {Math.round(scene.score * 100)}% Viral Score
+                      {Math.round(scene.score * 100)}% Moment Score
                     </span>
                   </div>
 
@@ -198,19 +198,19 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
 
                   {/* Signal Meters */}
                   <div className="space-y-1.5 pt-1">
-                    {/* Speech / Dialogue Density */}
+                    {/* Audio activity proxy; speech is not transcribed during ranking. */}
                     <div className="space-y-0.5">
                       <div className="flex justify-between text-[10px] font-semibold text-slate-400">
                         <span className="flex items-center gap-1">
                           <Volume2 className="w-3 h-3 text-cyan-400" />
-                          Dialogue Density
+                          Audio Activity
                         </span>
-                        <span className="font-mono">{Math.round(scene.dialogue_density * 100)}%</span>
+                        <span className="font-mono">{Math.round(scene.audio_activity * 100)}%</span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-cyan-400 rounded-full"
-                          style={{ width: `${scene.dialogue_density * 100}%` }}
+                          style={{ width: `${scene.audio_activity * 100}%` }}
                         />
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-import { Project, DashboardStats, GenerateReelsParams, ClipConfig } from '../types';
+import { Project, DashboardStats, GenerateReelsParams, ClipConfig, CleanupParams } from '../types';
 
 const API_BASE = '/api';
 
@@ -88,7 +88,10 @@ export const api = {
     return res.json();
   },
 
-  async generateReels(id: string, params: GenerateReelsParams): Promise<Project> {
+  async generateReels(
+    id: string,
+    params: GenerateReelsParams
+  ): Promise<{ success: boolean; message: string; project: Project }> {
     const res = await fetch(`${API_BASE}/projects/${id}/generate-reels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -129,6 +132,51 @@ export const api = {
   async getDownloadZip(id: string): Promise<{ download_url: string }> {
     const res = await fetch(`${API_BASE}/projects/${id}/download-all`);
     if (!res.ok) throw new Error('Failed to get download zip');
+    return res.json();
+  },
+
+  async triggerCleanup(id: string, params: CleanupParams): Promise<{ success: boolean; message: string; project: Project }> {
+    const res = await fetch(`${API_BASE}/projects/${id}/cleanup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to start video cleanup');
+    }
+    return res.json();
+  },
+
+  async saveCleanupRegions(id: string, regions: CleanupParams['regions']): Promise<CleanupParams['regions']> {
+    const res = await fetch(`${API_BASE}/projects/${id}/cleanup-regions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regions }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to save cleanup regions');
+    }
+    const data: { regions: CleanupParams['regions'] } = await res.json();
+    return data.regions;
+  },
+
+  async previewCleanupFrame(id: string, params: CleanupParams, timestamp: number = 2.0): Promise<{ preview_url: string }> {
+    const res = await fetch(`${API_BASE}/projects/${id}/cleanup/preview?timestamp=${timestamp}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error('Failed to render cleanup preview frame');
+    return res.json();
+  },
+
+  async cancelJob(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/projects/${id}/cancel`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to cancel job');
     return res.json();
   },
 };

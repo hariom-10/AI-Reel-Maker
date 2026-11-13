@@ -57,10 +57,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ stats, onNewProjec
             <span>AI Reel Maker Pro 2.0</span>
           </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight leading-tight">
-            Turn Any Long Video into High-Performing Short Clips in Seconds
+            Turn Long Videos Into Short Clips
           </h1>
           <p className="text-sm text-slate-300 leading-relaxed font-medium">
-            AI detects high-impact scenes, crops to 9:16 vertical, generates synchronized subtitles, and batch-exports reels for Instagram, TikTok, and YouTube Shorts.
+            Find scene and audio-activity highlights, format clips for vertical platforms, add optional local Whisper captions, and batch-export your reels.
           </p>
           <div className="pt-2 flex items-center gap-3">
             <button

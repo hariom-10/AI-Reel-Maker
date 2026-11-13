@@ -75,6 +75,22 @@ export interface ClipConfig {
   error_message: string;
 }
 
+export interface CleanupRegion {
+  id: string;
+  type: "inpaint" | "blur" | "replace_logo" | "add_text";
+  x: number;      // 0-100 percentage
+  y: number;
+  width: number;
+  height: number;
+  blur_strength: number;
+  replacement_text?: string;
+  logo_url?: string;
+  font_size?: number;
+  text_color?: string;
+  bg_color?: string;
+  bg_opacity?: number;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -86,7 +102,10 @@ export interface Project {
   metadata: VideoMetadata;
   scenes: DetectedScene[];
   clips: ClipConfig[];
-  status: "uploaded" | "analyzing" | "ready" | "exporting" | "completed";
+  cleanup_regions?: CleanupRegion[];
+  cleaned_video_url?: string;
+  cleaned_video_path?: string;
+  status: "uploaded" | "analyzing" | "generating" | "ready" | "cleaning" | "exporting" | "completed";
   progress: number;
   status_message: string;
 }
@@ -107,4 +126,10 @@ export interface GenerateReelsParams {
   auto_captions: boolean;
   caption_language: string;
   caption_style: string;
+}
+
+export interface CleanupParams {
+  regions: CleanupRegion[];
+  authorization_confirmed: boolean;
+  export_name?: string;
 }

@@ -1,16 +1,28 @@
 import React from 'react';
-import { LayoutDashboard, Film, FolderKanban, Library, Settings, Sparkles, Layers } from 'lucide-react';
+import {
+  LayoutDashboard, Film, Eraser, FolderKanban, Library, Settings,
+  Sparkles, Layers, Sun, Moon
+} from 'lucide-react';
 
 interface SidebarProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   activeProjectName?: string;
+  isDarkMode?: boolean;
+  onToggleTheme?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, activeProjectName }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentTab,
+  onTabChange,
+  activeProjectName,
+  isDarkMode = true,
+  onToggleTheme,
+}) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'studio', label: 'Create Reels', icon: Film },
+    { id: 'cleanup', label: 'AI Video Cleanup', icon: Eraser },
     { id: 'projects', label: 'My Projects', icon: FolderKanban },
     { id: 'library', label: 'Video Library', icon: Library },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -28,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, activ
             AI Reel Maker
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">PRO</span>
           </h1>
-          <p className="text-xs text-slate-400 font-medium">Video to Viral Shorts</p>
+          <p className="text-xs text-slate-400 font-medium">Video to Shorts</p>
         </div>
       </div>
 
@@ -44,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, activ
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+              className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer ${
                 isActive
                   ? 'bg-gradient-to-r from-violet-600/90 to-indigo-600/90 text-white shadow-lg shadow-violet-600/20 font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -56,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, activ
           );
         })}
 
-        {/* Current Active Project Quick-Card if in Studio */}
+        {/* Current Active Project Quick-Card */}
         {activeProjectName && (
           <div className="mt-8 mx-1 p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/50 text-left">
             <div className="flex items-center gap-2 text-xs font-semibold text-violet-400 mb-1">
@@ -70,18 +82,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, activ
         )}
       </nav>
 
-      {/* Local Engine Status Footer */}
-      <div className="p-4 m-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-slate-400">Processing Mode</span>
-          <span className="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            100% Local
-          </span>
+      {/* Theme Toggle & Hardware Status Footer */}
+      <div className="p-3 m-3 space-y-2">
+        {onToggleTheme && (
+          <button
+            onClick={onToggleTheme}
+            className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer border border-slate-800"
+          >
+            <span className="flex items-center gap-2">
+              {isDarkMode ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+              <span>{isDarkMode ? 'Dark Theme' : 'Light Theme'}</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">Switch</span>
+          </button>
+        )}
+
+        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-slate-400">Processing Mode</span>
+            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              100% Local
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            FFmpeg 8.1 Hardware Accel Active. No paid APIs required.
+          </p>
         </div>
-        <p className="text-[11px] text-slate-400 leading-relaxed">
-          FFmpeg 8.1 Hardware Accel Active. No paid APIs required.
-        </p>
       </div>
     </aside>
   );

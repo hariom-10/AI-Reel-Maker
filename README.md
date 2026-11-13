@@ -20,23 +20,22 @@ Runs **100% locally on Windows** using **FastAPI**, **FFmpeg 8.1**, and a **Reac
 - Automatic metadata extraction: Duration, Resolution (e.g. 1080p, 4K), FPS, Bitrate, and File Size.
 - In-modal video player to preview uploaded footage.
 
-### 3. AI Multi-Modal Scene Detection
-- Detects visual scene changes and cuts using FFmpeg scene heuristics and ContentDetector.
-- Analyzes audio dynamics, speech volume peaks, and silence detection to locate high-energy dialogue moments.
-- Assigns composite **Viral Engagement Scores** (0-100%) based on dialogue presence, pacing, and duration suitability.
+### 3. Scene Detection & Moment Ranking
+- Detects visual scene changes using PySceneDetect when installed, with an FFmpeg fallback.
+- Uses audio activity, scene pacing, and duration heuristics to rank candidate moments. Scores are suggestions, not a guarantee of engagement.
 - Generates high-resolution thumbnail previews for each moment.
-- Filter scenes by: *All*, *High Speech*, *High Action*, or *Selected*.
+- Filter scenes by: *All*, *High Audio Activity*, *High Action*, or *Selected*.
 - Select or reject candidate scenes before reel generation.
 
-### 4. Automatic Reel Generator
+### 4. Reel Candidate Generator
 - Configurable target durations:
   - **15 seconds**
   - **30 seconds**
   - **45 seconds**
   - **60 seconds**
   - **Custom duration** (5s - 120s)
-- Select the exact number of reels to extract (e.g. 5, 10, or 15 clips).
-- Intelligent boundary expansion aligns with natural pauses and scene transitions to prevent abrupt speech cuts.
+- Request up to 30 reels; candidates are selected only from the chosen scenes. If the selected scenes do not contain enough separated moments, fewer clips are produced.
+- Windows are aligned to scene boundaries where possible. Dialogue-aware cut points are not guaranteed.
 
 ### 5. Vertical Video Studio & Editor
 - **Aspect Ratios**:
@@ -44,17 +43,15 @@ Runs **100% locally on Windows** using **FastAPI**, **FFmpeg 8.1**, and a **Reac
   - `1:1` (Square Feed / LinkedIn - 1080x1080)
   - `16:9` (Standard Landscape - 1920x1080)
 - **Framing & Composition Modes**:
-  - `Smart Crop`: Subject-centered cropping with horizontal Pan (Center X slider 0% to 100%).
+  - `Smart Crop`: Centered crop with horizontal pan control.
   - `Blurred Background Stack`: High-end dual-layer composite with blurred, darkened background behind the original video.
   - `Letterbox Fit`: Clean, distraction-free letterbox framing.
 - **Trimming**: Live scrubbing range slider for Start Time and End Time with millisecond accuracy.
 - **Creator Privacy Masking**: Blur personal regions (e.g. sensitive private numbers or dates on user's own footage) with configurable X, Y, Width, and Height sliders.
 
 ### 6. Automatic Captions & Subtitles
-- Generates speech-aligned captions in:
-  - **English**
-  - **Hindi (हिंदी)**
-  - **Hinglish**
+- Uses local Whisper transcription for English and Hindi when the optional Whisper package and model are installed. Hinglish uses Whisper language detection; mixed-language accuracy varies.
+- Without Whisper, captions are omitted rather than replaced with sample or fabricated dialogue.
 - High-visibility styling presets:
   - **Bold Outline** (Hormozi / MrBeast viral shorts aesthetic)
   - **Clean Pill** (Dark background box)
@@ -74,7 +71,13 @@ Runs **100% locally on Windows** using **FastAPI**, **FFmpeg 8.1**, and a **Reac
 - Individual progress tracking with Completed, Rendering, and Retry states.
 - One-click **Download All (ZIP)** button bundling all completed reels.
 
-### 8. Project Persistence
+### 8. Authorized Video Region Editor
+- Requires an ownership/permission confirmation for both preview and export.
+- Supports spatial delogo, blur, text overlay, and delogo with replacement text. Region boxes can be dragged and adjusted.
+- Uses FFmpeg's spatial delogo filter, not AI video inpainting or motion tracking. Review the preview; moving overlays may not be removed cleanly.
+- Leaves the source video untouched and writes a separate edited file.
+
+### 9. Project Persistence
 - Projects, metadata, thumbnails, and exported reels are saved locally under `backend/data/`.
 - Projects persist across browser refreshes and backend restarts.
 - Rename or delete projects anytime from the "My Projects" view.
@@ -105,6 +108,26 @@ npm run dev
 ```
 *(Frontend runs at `http://localhost:5173`)*
 
+### Python dependencies and optional captions
+
+Install the backend dependencies from the repository root:
+```powershell
+python -m pip install -r requirements.txt
+```
+FFmpeg and FFprobe must also be installed and available on `PATH`.
+
+Whisper is optional because it downloads a model and requires PyTorch. To enable actual local speech captions:
+```powershell
+python -m pip install -r requirements-whisper.txt
+```
+The first caption run downloads Whisper's `base` model. Video and audio are processed locally; with Whisper absent or unavailable, caption generation reports that it was skipped and does not invent text.
+
+Generate a synthetic starter project, without replacing an existing demo by default:
+```powershell
+python create_sample_project.py
+```
+Use `--overwrite` only when you intend to replace the existing starter video and project.
+
 ---
 
 ## Directory Structure
@@ -116,10 +139,12 @@ AI reel maker/
 │   ├── config.py              # Storage paths and system configuration
 │   ├── models.py              # Pydantic schemas (Projects, Clips, Captions)
 │   ├── services/
-│   │   ├── video_analyzer.py  # Scene detection, speech density, and viral scoring
+│   │   ├── video_analyzer.py  # Scene detection and audio-activity ranking
 │   │   ├── reel_generator.py  # Clip segmentation and candidate ranking
 │   │   ├── video_editor.py    # FFmpeg 9:16 rendering, blur stack & ASS subtitle burn
-│   │   ├── transcriber.py     # Subtitle generation, language presets & ASS styling
+│   │   ├── transcriber.py     # Optional Whisper transcription and ASS styling
+│   │   ├── video_cleanup.py   # Authorized FFmpeg region edits
+│   │   ├── ffmpeg_runner.py   # FFmpeg progress and cancellation
 │   │   └── project_store.py   # Local JSON persistence
 │   └── data/                  # Local storage (uploads, exports, thumbnails, projects)
 │
@@ -140,7 +165,8 @@ AI reel maker/
 │   │       ├── ProjectsView.tsx       # Local project management
 │   │       ├── VideoLibraryView.tsx   # Unified media gallery
 │   │       ├── SettingsView.tsx       # System parameters & cache cleaner
-│   │       └── VideoPreviewModal.tsx  # Fullscreen video playback modal
+│   │       ├── VideoPreviewModal.tsx  # Fullscreen video playback modal
+│   │       └── VideoCleanupView.tsx   # Authorized cleanup editor and preview
 │   ├── vite.config.ts         # Vite configuration with Tailwind CSS v4 & proxy
 │   └── package.json
 │
@@ -154,6 +180,14 @@ AI reel maker/
 
 ## System Requirements
 - **OS**: Windows 10 / 11
-- **Python**: 3.10+ (tested on Python 3.14)
-- **Node.js**: v18+ (tested on Node v25.9)
+- **Python**: 3.10+
+- **Node.js**: v20.19+ or v22.12+ (tested on Node v25.9)
 - **FFmpeg**: Installed and available in PATH (tested with FFmpeg 8.1)
+
+## Current processing limits
+
+- Scene selection uses visual cuts and audio-activity heuristics; semantic dialogue understanding and engagement prediction are not provided.
+- Automatic captions require optional local Whisper installation and model download.
+- Smart crop is a centered crop with manual horizontal adjustment; face-aware tracking is not implemented.
+- Cleanup is a spatial FFmpeg approximation. It does not reconstruct missing content with a generative model or track moving marks.
+- Generated clip count can be lower than requested when the selected moments overlap or are too short.

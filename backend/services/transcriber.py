@@ -1,109 +1,102 @@
-import os
-import subprocess
+import importlib.util
 import logging
-import math
+import subprocess
+import uuid
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from models import SubtitleItem, CaptionConfig
+from typing import List, Optional
+
+from config import FFMPEG_BIN, TEMP_DIR
+from models import CaptionConfig, SubtitleItem
 
 logger = logging.getLogger(__name__)
+_whisper_model = None
 
-# Sample phrase sets for demonstration/fallback transcription when Whisper model is not downloaded
-ENGLISH_SAMPLE_PHRASES = [
-    "Here is the secret to mastering short form content in 2026.",
-    "Pay close attention to what happens right at this moment.",
-    "Most creators get this completely wrong when starting out.",
-    "Take a look at how this transformation actually works.",
-    "This one simple habit will save you hundreds of hours.",
-    "Notice the difference when you focus on high quality hooks.",
-    "Let me break down the exact formula step by step.",
-    "If you want to achieve real results, watch till the end."
-]
 
-HINDI_SAMPLE_PHRASES = [
-    "अगर आप भी वायरल रील्स बनाना चाहते हैं तो यह ट्रिक सीखें।",
-    "ध्यान से देखिए इस खास मोमेंट पर क्या होता है।",
-    "ज्यादातर क्रिएटर्स शुरुआत में यही बड़ी गलती करते हैं।",
-    "इस आसान तरीके से आप अपनी वीडियो को 10x बेहतर बना सकते हैं।",
-    "यह एक सीक्रेट फॉर्मूला आपकी पूरी ग्रोथ बदल देगा।",
-    "वीडियो को अंत तक जरूर देखें ताकि कोई स्टेप मिस न हो।"
-]
+def whisper_available() -> bool:
+    return importlib.util.find_spec("whisper") is not None
 
-HINGLISH_SAMPLE_PHRASES = [
-    "Agar aap bhi viral reels banana chahte ho toh ye trick zaroor dekho.",
-    "Dhyan se notice karo iss moment par exactly kya hota hai.",
-    "Bahut se creators starting me ye mistake repeat karte hain.",
-    "Ye simple formula use karke aap 10x engagement generate kar sakte ho.",
-    "Aapka workflow kitna fast ho sakta hai, khud check kijiye.",
-    "Video ko pura dekhein taaki koi important tip miss na ho."
-]
 
-def transcribe_audio_whisper(audio_path: Path, language: str = "en") -> Optional[List[SubtitleItem]]:
-    """Attempt speech transcription using local Whisper if installed."""
+def transcribe_audio_whisper(
+    audio_path: Path,
+    language: str = "en",
+    clip_start_time: float = 0.0,
+) -> Optional[List[SubtitleItem]]:
+    """Transcribe with a locally installed Whisper model; never invent captions."""
+    global _whisper_model
     try:
         import whisper
-        logger.info(f"Loading local Whisper model for transcription ({language})...")
-        model = whisper.load_model("base")
+
+        if _whisper_model is None:
+            logger.info("Loading local Whisper base model for transcription.")
+            _whisper_model = whisper.load_model("base")
+
         lang_code = "hi" if language == "hi" else "en"
-        result = model.transcribe(str(audio_path), language=lang_code if language != "hinglish" else None)
-        
-        segments = result.get("segments", [])
-        items = []
-        for idx, seg in enumerate(segments):
-            items.append(SubtitleItem(
-                id=f"sub_{idx+1}",
-                start_time=round(float(seg["start"]), 2),
-                end_time=round(float(seg["end"]), 2),
-                text=seg["text"].strip()
-            ))
-        return items
-    except Exception as e:
-        logger.info(f"Local Whisper library not active or model not downloaded: {e}. Using acoustic speech alignment.")
+        result = _whisper_model.transcribe(
+            str(audio_path),
+            language=lang_code if language != "hinglish" else None,
+            fp16=False,
+        )
+        return [
+            SubtitleItem(
+                id=f"sub_{idx}",
+                start_time=round(clip_start_time + float(segment["start"]), 2),
+                end_time=round(clip_start_time + float(segment["end"]), 2),
+                text=str(segment.get("text", "")).strip(),
+            )
+            for idx, segment in enumerate(result.get("segments", []), 1)
+            if str(segment.get("text", "")).strip()
+        ]
+    except Exception as exc:
+        logger.warning("Whisper transcription unavailable: %s", exc)
         return None
+
 
 def generate_captions_for_clip(
     start_time: float,
     end_time: float,
     language: str = "en",
-    active_speech_intervals: Optional[List[Dict[str, float]]] = None
+    video_path: Optional[Path] = None,
 ) -> List[SubtitleItem]:
-    """
-    Generate speech-aligned subtitle items for a clip duration.
-    Uses audio activity boundaries to ensure subtitles match dialogue rhythm.
-    """
-    clip_duration = end_time - start_time
-    if clip_duration <= 0:
+    """Create real local captions when Whisper is installed; otherwise return none."""
+    if not video_path or end_time <= start_time:
+        return []
+    if not whisper_available():
+        logger.warning("Auto captions skipped: install the optional openai-whisper package.")
         return []
 
-    # Choose phrase pool
-    if language == "hi":
-        phrases = HINDI_SAMPLE_PHRASES
-    elif language == "hinglish":
-        phrases = HINGLISH_SAMPLE_PHRASES
-    else:
-        phrases = ENGLISH_SAMPLE_PHRASES
+    audio_path = TEMP_DIR / f"caption_{uuid.uuid4().hex}.wav"
+    command = [
+        FFMPEG_BIN,
+        "-y",
+        "-ss",
+        str(start_time),
+        "-t",
+        str(end_time - start_time),
+        "-i",
+        str(video_path),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+        str(audio_path),
+    ]
+    try:
+        subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        return transcribe_audio_whisper(audio_path, language, start_time) or []
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.error("Could not extract audio for captions from %s: %s", video_path, exc)
+        return []
+    finally:
+        audio_path.unlink(missing_ok=True)
 
-    # Segment clip into readable 2.5s - 4.5s subtitle chunks
-    chunk_len = 3.2
-    num_chunks = max(1, math.ceil(clip_duration / chunk_len))
-    step = clip_duration / num_chunks
-
-    subtitles = []
-    phrase_idx = int(start_time // 10) % len(phrases)
-
-    for i in range(num_chunks):
-        s_start = round(start_time + (i * step), 2)
-        s_end = round(min(end_time, s_start + step - 0.2), 2)
-        text = phrases[(phrase_idx + i) % len(phrases)]
-
-        subtitles.append(SubtitleItem(
-            id=f"sub_{i+1}",
-            start_time=s_start,
-            end_time=s_end,
-            text=text
-        ))
-
-    return subtitles
 
 def format_timestamp_ass(seconds: float) -> str:
     """Format seconds as H:MM:SS.CC for ASS subtitles."""
@@ -115,6 +108,7 @@ def format_timestamp_ass(seconds: float) -> str:
         centis = 99
     return f"{hrs}:{mins:02d}:{secs:02d}.{centis:02d}"
 
+
 def format_timestamp_srt(seconds: float) -> str:
     """Format seconds as HH:MM:SS,mmm for SRT subtitles."""
     hrs = int(seconds // 3600)
@@ -124,6 +118,7 @@ def format_timestamp_srt(seconds: float) -> str:
     if millis >= 1000:
         millis = 999
     return f"{hrs:02d}:{mins:02d}:{secs:02d},{millis:03d}"
+
 
 def hex_to_ass_color(hex_color: str, opacity: float = 1.0) -> str:
     """Convert #RRGGBB to &HAABBGGRR (ASS color format)."""
@@ -135,28 +130,24 @@ def hex_to_ass_color(hex_color: str, opacity: float = 1.0) -> str:
     alpha = int((1.0 - opacity) * 255)
     return f"&H{alpha:02X}{b}{g}{r}"
 
+
 def generate_ass_subtitle_file(
     subtitles: List[SubtitleItem],
     config: CaptionConfig,
     clip_start_time: float,
     output_path: Path,
     target_width: int = 1080,
-    target_height: int = 1920
+    target_height: int = 1920,
 ) -> Path:
-    """
-    Generate a styled ASS subtitle file for FFmpeg burning.
-    Supports font styling, bold outline, colored highlights, and custom placement.
-    """
+    """Generate a styled ASS subtitle file for FFmpeg burning."""
     font_name = config.font_family if config.font_family else "Impact"
     font_size = max(18, int(config.font_size * (target_height / 1080)))
     primary_color = hex_to_ass_color(config.text_color, 1.0)
-    outline_color = "&H00000000"  # Solid black outline
+    outline_color = "&H00000000"
     back_color = hex_to_ass_color(config.bg_color, config.bg_opacity)
 
-    # Vertical alignment
-    # Alignment: 2 = Bottom center, 5 = Mid center, 8 = Top center
     alignment = 2
-    margin_v = int(target_height * 0.18)  # default bottom margin
+    margin_v = int(target_height * 0.18)
     if config.position == "center":
         alignment = 5
         margin_v = 0
@@ -169,7 +160,6 @@ def generate_ass_subtitle_file(
 
     border_style = 3 if config.style == "clean_pill" else 1
     outline_thickness = 4 if config.style == "bold_outline" else 2
-
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {target_width}
@@ -184,45 +174,40 @@ Style: Default,{font_name},{font_size},{primary_color},&H000000FF,{outline_color
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events = []
-    for sub in subtitles:
-        # Re-zero timestamps relative to the trimmed clip start
-        rel_start = max(0.0, sub.start_time - clip_start_time)
-        rel_end = max(rel_start + 0.3, sub.end_time - clip_start_time)
-
-        start_str = format_timestamp_ass(rel_start)
-        end_str = format_timestamp_ass(rel_end)
-
-        # Style text (uppercase for punchy shorts aesthetics if bold_outline)
-        clean_text = sub.text.upper() if config.style in ["bold_outline", "karaoke"] else sub.text
-        # Escape newlines
-        clean_text = clean_text.replace("\n", "\\N")
-
-        events.append(f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{clean_text}")
+    for subtitle in subtitles:
+        rel_start = max(0.0, subtitle.start_time - clip_start_time)
+        rel_end = max(rel_start + 0.3, subtitle.end_time - clip_start_time)
+        text = subtitle.text.upper() if config.style in ["bold_outline", "karaoke"] else subtitle.text
+        text = text.replace("\n", "\\N")
+        events.append(
+            f"Dialogue: 0,{format_timestamp_ass(rel_start)},"
+            f"{format_timestamp_ass(rel_end)},Default,,0,0,0,,{text}"
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(header + "\n".join(events) + "\n")
-
+    output_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
     return output_path
+
 
 def generate_srt_subtitle_file(
     subtitles: List[SubtitleItem],
     clip_start_time: float,
-    output_path: Path
+    output_path: Path,
 ) -> Path:
-    """Generate standard SRT file."""
+    """Generate standard SRT subtitles."""
     lines = []
-    for idx, sub in enumerate(subtitles, 1):
-        rel_start = max(0.0, sub.start_time - clip_start_time)
-        rel_end = max(rel_start + 0.3, sub.end_time - clip_start_time)
-
-        lines.append(str(idx))
-        lines.append(f"{format_timestamp_srt(rel_start)} --> {format_timestamp_srt(rel_end)}")
-        lines.append(sub.text.strip())
-        lines.append("")
+    for idx, subtitle in enumerate(subtitles, 1):
+        rel_start = max(0.0, subtitle.start_time - clip_start_time)
+        rel_end = max(rel_start + 0.3, subtitle.end_time - clip_start_time)
+        lines.extend(
+            [
+                str(idx),
+                f"{format_timestamp_srt(rel_start)} --> {format_timestamp_srt(rel_end)}",
+                subtitle.text.strip(),
+                "",
+            ]
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-
+    output_path.write_text("\n".join(lines), encoding="utf-8")
     return output_path

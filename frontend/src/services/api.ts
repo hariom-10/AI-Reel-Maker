@@ -2,6 +2,13 @@ import { Project, DashboardStats, GenerateReelsParams, ClipConfig, CleanupParams
 
 const API_BASE = 'https://hariomslap.tail074e1a.ts.net';
 
+const backendUrl = (url?: string) => {
+  if (!url) return url;
+  return url.startsWith('/media/')
+    ? `${API_BASE}${url}`
+    : url;
+};
+
 export const api = {
   async getStats(): Promise<DashboardStats> {
     const res = await fetch(`${API_BASE}/stats`);

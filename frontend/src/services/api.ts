@@ -8,13 +8,13 @@ const backendUrl = (url?: string) => {
     ? `${API_BASE}${url}`
     : url;
 };
-
 export const api = {
   async getStats(): Promise<DashboardStats> {
     const res = await fetch(`${API_BASE}/stats`);
     if (!res.ok) throw new Error('Failed to fetch dashboard stats');
     return res.json();
   },
+  
 
   async listProjects(): Promise<Project[]> {
     const res = await fetch(`${API_BASE}/projects`);

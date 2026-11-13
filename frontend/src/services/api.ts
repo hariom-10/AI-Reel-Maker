@@ -149,7 +149,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clip_ids: clipIds, quality: 'high', fps: 30, resolution: '1080x1920' }),
     });
-    if (!res.ok) throw new Error('Failed to start batch export');
+    if (!res.ok) {
+  const errorText = await res.text();
+  throw new Error(`Batch export failed (${res.status}): ${errorText}`);
+}
     return normalizeMediaUrls(await res.json());
   },
 

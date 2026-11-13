@@ -1,6 +1,6 @@
 import { Project, DashboardStats, GenerateReelsParams, ClipConfig, CleanupParams } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = 'https://hariomslap.tail074e1a.ts.net';
 
 export const api = {
   async getStats(): Promise<DashboardStats> {

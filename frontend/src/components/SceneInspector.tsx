@@ -44,12 +44,12 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
     <div className="space-y-6">
       {/* Top Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#0F1422] border border-slate-800">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <h3 className="flex flex-wrap items-center gap-2 text-sm font-bold text-white">
               Detected AI Scenes & Moments
               <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-mono">
                 {scenes.length} Scenes
@@ -61,7 +61,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={onReAnalyze}
             disabled={isAnalyzing}
@@ -83,8 +83,8 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
       </div>
 
       {/* Filter Chips & Selection Bar */}
-      <div className="flex items-center justify-between px-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           {(['all', 'high_audio', 'high_action', 'selected'] as const).map((tab) => (
             <button
               key={tab}
@@ -119,7 +119,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
 
       {/* Scenes Grid */}
       {filteredScenes.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
           {filteredScenes.map((scene) => {
             const isTopScore = scene.score >= 0.8;
             return (

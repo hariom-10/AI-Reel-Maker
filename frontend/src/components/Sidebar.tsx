@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   LayoutDashboard, Film, Eraser, FolderKanban, Library, Settings,
-  Sparkles, Layers, Sun, Moon
+  Sparkles, Layers, Sun, Moon, X
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -10,6 +10,8 @@ interface SidebarProps {
   activeProjectName?: string;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
+  mobileOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -18,6 +20,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeProjectName,
   isDarkMode = true,
   onToggleTheme,
+  mobileOpen = false,
+  onClose,
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -29,24 +33,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 bg-[#0D121F] border-r border-slate-800/80 flex flex-col h-screen select-none shrink-0 z-20">
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-72 shrink-0 select-none flex-col border-r border-slate-800/80 bg-[#0D121F] transition-transform duration-200 md:relative md:z-20 md:w-20 md:translate-x-0 lg:w-64 ${
+      mobileOpen ? 'translate-x-0' : '-translate-x-full'
+    }`}>
       {/* Brand Logo */}
-      <div className="p-6 flex items-center gap-3 border-b border-slate-800/60">
+      <div className="p-4 lg:p-6 flex items-center gap-3 border-b border-slate-800/60">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
-        <div>
+        <div className="md:hidden lg:block min-w-0">
           <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
             AI Reel Maker
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">PRO</span>
           </h1>
           <p className="text-xs text-slate-400 font-medium">Video to Shorts</p>
         </div>
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={onClose}
+          className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white md:hidden"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-6 space-y-1.5 overflow-y-auto">
-        <div className="px-3 pb-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+      <nav className="flex-1 px-3 py-4 lg:py-6 space-y-1.5 overflow-y-auto">
+        <div className="px-3 pb-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase md:hidden lg:block">
           Menu
         </div>
         {navItems.map((item) => {
@@ -56,21 +70,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer ${
+              title={item.label}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 lg:py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer md:justify-center lg:justify-start md:px-0 lg:px-3.5 ${
                 isActive
                   ? 'bg-gradient-to-r from-violet-600/90 to-indigo-600/90 text-white shadow-lg shadow-violet-600/20 font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
               <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-              <span>{item.label}</span>
+              <span className="md:hidden lg:inline">{item.label}</span>
             </button>
           );
         })}
 
         {/* Current Active Project Quick-Card */}
         {activeProjectName && (
-          <div className="mt-8 mx-1 p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/50 text-left">
+          <div className="mt-8 mx-1 p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/50 text-left md:hidden lg:block">
             <div className="flex items-center gap-2 text-xs font-semibold text-violet-400 mb-1">
               <Layers className="w-3.5 h-3.5" />
               <span>Active Project</span>
@@ -83,21 +98,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Theme Toggle & Hardware Status Footer */}
-      <div className="p-3 m-3 space-y-2">
+      <div className="p-2 m-2 lg:p-3 lg:m-3 space-y-2">
         {onToggleTheme && (
           <button
             onClick={onToggleTheme}
-            className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer border border-slate-800"
+            title={isDarkMode ? 'Dark Theme' : 'Light Theme'}
+            className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer border border-slate-800 md:justify-center md:px-0 lg:justify-between lg:px-3.5"
           >
             <span className="flex items-center gap-2">
               {isDarkMode ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
-              <span>{isDarkMode ? 'Dark Theme' : 'Light Theme'}</span>
+              <span className="md:hidden lg:inline">{isDarkMode ? 'Dark Theme' : 'Light Theme'}</span>
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">Switch</span>
+            <span className="text-[10px] text-slate-400 font-mono md:hidden lg:inline">Switch</span>
           </button>
         )}
 
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs md:hidden lg:block">
           <div className="flex items-center justify-between mb-1">
             <span className="text-slate-400">Processing Mode</span>
             <span className="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px]">

@@ -90,10 +90,10 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-[#0F1422] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm animate-in fade-in duration-200 sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0F1422] shadow-2xl sm:max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400">
               <Download className="w-5 h-5" />
@@ -114,7 +114,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto space-y-5">
+        <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
           {error && (
             <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -125,7 +125,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
           {/* Export Overall Progress Bar */}
           {isExporting && (
             <div className="space-y-2 p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <div className="flex justify-between text-xs font-semibold">
+              <div className="flex flex-wrap justify-between gap-2 text-xs font-semibold">
                 <span className="text-slate-300 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
                   {project.status_message || 'Rendering clips in batch...'}
@@ -143,7 +143,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
 
           {/* Download All as ZIP Banner */}
           {zipUrl && (
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+            <div className="flex flex-col gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <FileArchive className="w-6 h-6 text-emerald-400 shrink-0" />
                 <div>
@@ -164,7 +164,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
 
           {/* Clips List Selection */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-400 px-1">
+            <div className="flex flex-col gap-2 px-1 text-xs font-semibold text-slate-400 sm:flex-row sm:items-center sm:justify-between">
               <span>Select Clips to Export ({selectedIds.length} / {clips.length})</span>
               <div className="flex items-center gap-3">
                 <button onClick={() => selectAll(true)} className="text-violet-400 hover:underline cursor-pointer">
@@ -183,20 +183,20 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
                 return (
                   <div
                     key={clip.clip_id}
-                    className={`p-3 rounded-xl border flex items-center justify-between transition ${
+                    className={`flex flex-col gap-3 rounded-xl border p-3 transition sm:flex-row sm:items-center sm:justify-between ${
                       isSelected
                         ? 'border-slate-700 bg-slate-900/90'
                         : 'border-slate-800/60 bg-slate-900/30 opacity-60'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelect(clip.clip_id)}
                         className="w-4 h-4 accent-violet-500 cursor-pointer"
                       />
-                      <div className="space-y-0.5">
+                      <div className="min-w-0 space-y-0.5">
                         <p className="text-xs font-bold text-white">{clip.title}</p>
                         <p className="text-[11px] font-mono text-slate-400">
                           {clip.duration}s • {clip.crop_config.aspect_ratio} •{' '}
@@ -205,7 +205,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {clip.status === 'exported' && (
                         <>
                           <button
@@ -257,7 +257,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-[#0B0F17] flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-800 bg-[#0B0F17] px-4 py-4 sm:px-6">
           <button
             onClick={onClose}
             disabled={isExporting}
@@ -269,7 +269,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
           <button
             onClick={handleStartExport}
             disabled={isExporting || selectedIds.length === 0}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
           >
             {isExporting ? (
               <>

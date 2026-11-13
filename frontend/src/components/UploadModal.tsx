@@ -106,10 +106,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-[#0F1422] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm animate-in fade-in duration-200 sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0F1422] shadow-2xl sm:max-h-[90vh]">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-violet-500/10 text-violet-400">
               <Film className="w-5 h-5" />
@@ -129,7 +129,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-5">
+        <div className="min-w-0 space-y-5 overflow-y-auto p-4 sm:p-6">
           {error && (
             <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -146,7 +146,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
                 onClick={() => !isUploading && fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${
+                className={`border-2 border-dashed rounded-2xl p-5 text-center transition-all cursor-pointer sm:p-8 ${
                   dragActive
                     ? 'border-violet-500 bg-violet-500/10 scale-[0.99]'
                     : file
@@ -239,7 +239,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
               </div>
 
               {/* Metadata Badges Grid */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
                   <span className="text-[11px] text-slate-400 uppercase font-semibold">Duration</span>
                   <p className="text-sm font-bold text-white mt-0.5">
@@ -270,7 +270,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-[#0B0F17] flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-800 bg-[#0B0F17] px-4 py-4 sm:px-6">
           <button
             onClick={onClose}
             disabled={isUploading}
@@ -283,7 +283,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
             <button
               onClick={handleUpload}
               disabled={!file || isUploading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-md shadow-violet-600/20 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-md shadow-violet-600/20 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isUploading ? (
                 <>
@@ -300,7 +300,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onPro
           ) : (
             <button
               onClick={handleProceed}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-violet-600/30 transition cursor-pointer"
+              className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-violet-600/30 transition cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Open in Studio & Detect Scenes</span>

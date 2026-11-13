@@ -44,10 +44,10 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-xl bg-[#0F1422] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm animate-in fade-in duration-200 sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0F1422] shadow-2xl sm:max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400">
               <Sparkles className="w-5 h-5" />
@@ -66,14 +66,14 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto p-4 sm:p-6">
           {/* Target Reel Duration */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-violet-400" />
               Reel Duration
             </label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {[15, 30, 45, 60].map((dur) => (
                 <button
                   type="button"
@@ -165,7 +165,7 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
           {/* Aspect Ratio */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-300">Aspect Ratio</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setAspectRatio('9:16')}
@@ -219,7 +219,7 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
           {/* Framing / Crop Mode */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-300">Framing & Background</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
               {[
                 { id: 'smart_crop', label: 'Smart Crop', desc: 'Center subject crop' },
                 { id: 'blur_bg', label: 'Blurred Stack', desc: 'Blurred background' },
@@ -290,7 +290,7 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
           </div>
 
           {/* Modal Footer */}
-          <div className="pt-2 flex items-center justify-between border-t border-slate-800">
+          <div className="pt-2 flex flex-col-reverse items-stretch justify-between gap-2 border-t border-slate-800 sm:flex-row sm:items-center">
             <button
               type="button"
               onClick={onClose}
@@ -302,7 +302,7 @@ export const ReelGeneratorModal: React.FC<ReelGeneratorModalProps> = ({
             <button
               type="submit"
               disabled={isGenerating}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>{isGenerating ? 'Generating Reels...' : `Generate ${targetCount} Short Clips`}</span>

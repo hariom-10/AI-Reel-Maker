@@ -39,6 +39,7 @@ export function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingReels, setIsGeneratingReels] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const toggleTheme = () => {
     setIsDarkMode((prev) => {
@@ -199,12 +200,22 @@ export function App() {
   const headerInfo = getHeaderInfo();
 
   return (
-    <div className={`flex h-screen w-screen overflow-hidden font-sans ${isDarkMode ? 'dark bg-[#090D16] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`flex h-dvh min-h-screen w-full overflow-hidden font-sans ${isDarkMode ? 'dark bg-[#090D16] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+      {isMobileNavOpen && (
+        <button
+          aria-label="Close navigation menu"
+          onClick={() => setIsMobileNavOpen(false)}
+          className="fixed inset-0 z-30 bg-black/60 md:hidden"
+        />
+      )}
       {/* Sidebar Navigation */}
       <Sidebar
+        mobileOpen={isMobileNavOpen}
+        onClose={() => setIsMobileNavOpen(false)}
         currentTab={currentTab}
         onTabChange={(tab) => {
           setCurrentTab(tab);
+          setIsMobileNavOpen(false);
           if (tab === 'studio' && currentProject) {
             if (currentProject.clips && currentProject.clips.length > 0) {
               setStudioSubView('editor');
@@ -219,19 +230,20 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col h-dvh overflow-hidden">
         {/* Global Header */}
         <Header
           title={headerInfo.title}
           subtitle={headerInfo.subtitle}
           onNewProject={() => setIsUploadOpen(true)}
+          onMenuClick={() => setIsMobileNavOpen(true)}
           isProcessing={isAnalyzing || isGeneratingReels}
         />
 
         {noticeMessage && (
           <div
             role="status"
-            className="flex items-center justify-between gap-4 border-b border-sky-500/20 bg-sky-500/10 px-8 py-3 text-xs text-sky-100"
+            className="flex items-start sm:items-center justify-between gap-3 border-b border-sky-500/20 bg-sky-500/10 px-4 sm:px-6 lg:px-8 py-3 text-xs text-sky-100"
           >
             <span>{noticeMessage}</span>
             <button
@@ -245,10 +257,10 @@ export function App() {
 
         {/* Cancellation Bar if job is busy */}
         {currentProject && ['analyzing', 'generating', 'cleaning', 'exporting'].includes(currentProject.status) && (
-          <div className="px-8 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
+          <div className="px-4 sm:px-6 lg:px-8 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 flex items-start sm:items-center gap-3 justify-between">
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              {currentProject.status_message} ({currentProject.progress}%)
+              <span className="break-words">{currentProject.status_message} ({currentProject.progress}%)</span>
             </span>
             <button
               onClick={handleCancelCurrentJob}
@@ -260,7 +272,7 @@ export function App() {
         )}
 
         {/* Dynamic Views */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           {currentTab === 'dashboard' && (
             <DashboardView
               stats={stats}
@@ -270,9 +282,9 @@ export function App() {
           )}
 
           {currentTab === 'studio' && (
-            <div className="h-full">
+            <div className="min-h-full">
               {!currentProject ? (
-                <div className="p-12 text-center text-slate-400 space-y-4">
+                <div className="p-6 sm:p-12 text-center text-slate-400 space-y-4">
                   <p className="text-base font-bold text-white">No Active Video Project Selected</p>
                   <p className="text-xs">Upload a video or choose an existing project to start creating reels.</p>
                   <button
@@ -284,7 +296,7 @@ export function App() {
                 </div>
               ) : studioSubView === 'scenes' ? (
                 /* Scene Inspector Sub-View */
-                <div className="p-8 max-w-7xl mx-auto">
+                <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
                   <SceneInspector
                     project={currentProject}
                     onSelectScene={(sceneId, selected) => {
@@ -322,7 +334,7 @@ export function App() {
           )}
 
           {currentTab === 'cleanup' && (
-            <div>
+            <div className="min-w-0">
               {currentProject ? (
                 <VideoCleanupView
                   key={currentProject.id}
@@ -331,7 +343,7 @@ export function App() {
                   onPreviewVideo={(url, title) => setPreviewModalData({ url, title })}
                 />
               ) : (
-                <div className="p-12 text-center text-slate-400 space-y-3">
+                <div className="p-6 sm:p-12 text-center text-slate-400 space-y-3">
                   <p className="text-base font-bold text-white">No Video Project Selected for Cleanup</p>
                   <p className="text-xs">Please select or upload a video project first.</p>
                   <button

@@ -10,7 +10,7 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
       <div>
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <Settings className="w-5 h-5 text-violet-400" />
@@ -37,21 +37,21 @@ export const SettingsView: React.FC = () => {
           <div className="space-y-2.5 text-xs text-slate-300">
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Hardware Accel:</span>
-              <span className="font-semibold text-emerald-400 flex items-center gap-1">
+              <span className="flex items-center gap-1 text-right font-semibold text-emerald-400">
                 <CheckCircle2 className="w-3.5 h-3.5" /> D3D11 / NVENC / OpenCL
               </span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Video Codec:</span>
-              <span className="font-mono text-white">libx264 (H.264 High Profile)</span>
+              <span className="break-words text-right font-mono text-white">libx264 (H.264 High Profile)</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Audio Codec:</span>
-              <span className="font-mono text-white">AAC Stereo 192 kbps 48kHz</span>
+              <span className="break-words text-right font-mono text-white">AAC Stereo 192 kbps 48kHz</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Subtitles Engine:</span>
-              <span className="font-mono text-white">libass + FreeType + HarfBuzz</span>
+              <span className="break-words text-right font-mono text-white">libass + FreeType + HarfBuzz</span>
             </div>
           </div>
         </div>
@@ -71,28 +71,28 @@ export const SettingsView: React.FC = () => {
           <div className="space-y-2.5 text-xs text-slate-300">
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Scene Detector:</span>
-              <span className="font-semibold text-emerald-400 flex items-center gap-1">
+              <span className="flex items-center gap-1 text-right font-semibold text-emerald-400">
                 <CheckCircle2 className="w-3.5 h-3.5" /> FFmpeg Native + ContentDetector
               </span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Audio Activity Engine:</span>
-              <span className="font-mono text-white">Acoustic Silence & Peak Meter</span>
+              <span className="break-words text-right font-mono text-white">Acoustic Silence & Peak Meter</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Speech Transcription:</span>
-              <span className="font-mono text-white">Whisper Local + Smart Aligner</span>
+              <span className="break-words text-right font-mono text-white">Whisper Local + Smart Aligner</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-400">Supported Languages:</span>
-              <span className="font-mono text-white">English, Hindi, Hinglish</span>
+              <span className="break-words text-right font-mono text-white">English, Hindi, Hinglish</span>
             </div>
           </div>
         </div>
 
         {/* Local Storage & Cache */}
-        <div className="p-6 rounded-2xl bg-[#0F1422] border border-slate-800 space-y-4 md:col-span-2">
-          <div className="flex items-center justify-between">
+        <div className="p-4 sm:p-6 rounded-2xl bg-[#0F1422] border border-slate-800 space-y-4 md:col-span-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
                 <HardDrive className="w-5 h-5" />

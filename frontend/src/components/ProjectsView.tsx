@@ -62,7 +62,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -90,7 +90,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
       {/* Projects Grid */}
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {filtered.map((project) => (
             <div
               key={project.id}
@@ -131,11 +131,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </button>
                   </form>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white group-hover:text-violet-300 transition truncate max-w-[200px]">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-white group-hover:text-violet-300 transition">
                       {project.name}
                     </h3>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex shrink-0 items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => handleStartRename(project, e)}
                         className="p-1 rounded text-slate-400 hover:text-white"

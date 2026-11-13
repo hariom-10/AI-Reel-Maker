@@ -183,15 +183,15 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
   ];
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto select-none">
+    <div className="mx-auto max-w-7xl space-y-5 p-4 select-none sm:space-y-6 sm:p-6 lg:p-8">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-3xl bg-gradient-to-r from-violet-950/60 via-slate-900 to-[#0F1422] border border-violet-500/20 shadow-xl">
-        <div className="flex items-center gap-3.5">
+      <div className="flex flex-col gap-4 rounded-3xl border border-violet-500/20 bg-gradient-to-r from-violet-950/60 via-slate-900 to-[#0F1422] p-4 shadow-xl sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3.5">
           <div className="p-3 rounded-2xl bg-violet-600/20 text-violet-400 border border-violet-500/30">
             <Eraser className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="flex flex-wrap items-center gap-2 text-base font-bold text-white sm:text-lg">
               Authorized Video Region Editor
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300">
                 Non-Destructive
@@ -213,7 +213,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
         )}
 
         {/* Action Button */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleSaveRegions}
             disabled={isSavingRegions || isProcessing}
@@ -244,7 +244,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
 
       {/* Cleaned Result Alert if ready */}
       {project.cleaned_video_url && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             <div>
@@ -252,7 +252,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
               <p className="text-xs text-emerald-300/80">Saved as a separate high-resolution file.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => onPreviewVideo(project.cleaned_video_url!, `${project.name} (Cleaned)`)}
               className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-200 text-xs font-semibold hover:bg-slate-700 transition"
@@ -277,9 +277,9 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
       )}
 
       {/* Main Studio Viewport */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
         {/* Left: Video Canvas & Interactive Region Bounding Boxes */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <div
             ref={containerRef}
             className="relative aspect-video rounded-3xl bg-black overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center group"
@@ -370,7 +370,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
           </div>
 
           {/* Player Bar & Before / After Toggle */}
-          <div className="p-4 rounded-2xl bg-[#0F1422] border border-slate-800 flex items-center justify-between gap-4">
+          <div className="flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0F1422] p-3 sm:flex-row sm:items-center sm:gap-4 sm:p-4">
             <div className="flex items-center gap-3">
               <button
                 onClick={togglePlay}
@@ -385,7 +385,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
             </div>
 
             {/* Before vs After Switcher */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setPreviewMode('original')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${

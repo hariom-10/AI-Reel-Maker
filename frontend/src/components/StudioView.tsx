@@ -178,10 +178,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-[#090D16] overflow-hidden select-none">
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-visible bg-[#090D16] select-none lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:overflow-hidden">
       {/* Top Studio Bar */}
-      <div className="px-6 py-3 border-b border-slate-800/80 bg-[#0D121F] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-slate-800/80 bg-[#0D121F] px-3 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <button
             onClick={onBackToScenes}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition cursor-pointer"
@@ -191,7 +191,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </button>
 
           {/* Clip Selector Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-xl py-1">
+          <div className="flex max-w-full items-center gap-1.5 overflow-x-auto py-1 sm:max-w-xl">
             {clips.map((clip, idx) => (
               <button
                 key={clip.clip_id}
@@ -209,7 +209,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
 
         {/* Studio Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Undo / Redo */}
           <div className="flex items-center gap-1 px-1.5 py-1 rounded-xl bg-slate-900 border border-slate-800">
             <button
@@ -291,17 +291,17 @@ export const StudioView: React.FC<StudioViewProps> = ({
       )}
 
       {/* Main Workspace: Left Mockup Player + Right Settings Panel */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
         {/* Left Interactive Phone Canvas */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6 relative bg-gradient-to-b from-slate-950 to-[#0A0E17] overflow-hidden">
+        <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-slate-950 to-[#0A0E17] p-3 sm:p-6">
           {/* Smartphone Mockup */}
           <div
-            className={`relative rounded-[36px] p-3.5 bg-slate-900 border-4 border-slate-700 shadow-2xl shadow-black/80 flex flex-col items-center justify-center transition-all ${
+            className={`relative flex h-auto w-full items-center justify-center rounded-[28px] border-4 border-slate-700 bg-slate-900 p-2.5 shadow-2xl shadow-black/80 transition-all sm:rounded-[36px] sm:p-3.5 ${
               crop.aspect_ratio === '9:16'
-                ? 'w-[320px] h-[570px]'
+                ? 'aspect-[9/16] max-w-[320px]'
                 : crop.aspect_ratio === '1:1'
-                ? 'w-[420px] h-[420px]'
-                : 'w-[560px] h-[315px]'
+                ? 'aspect-square max-w-[420px]'
+                : 'aspect-video max-w-[560px]'
             }`}
           >
             {/* Phone Notch */}
@@ -391,7 +391,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
 
           {/* Bottom Live Scrubber Bar */}
-          <div className="w-full max-w-xl mt-6 p-4 rounded-2xl bg-[#0F1422] border border-slate-800 flex items-center gap-4">
+          <div className="mt-4 flex w-full max-w-xl items-center gap-3 rounded-2xl border border-slate-800 bg-[#0F1422] p-3 sm:mt-6 sm:gap-4 sm:p-4">
             <button
               onClick={togglePlay}
               className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition cursor-pointer"
@@ -424,7 +424,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
 
         {/* Right Configuration Inspector Panel */}
-        <div className="w-96 border-l border-slate-800/80 bg-[#0D121F] flex flex-col h-full overflow-hidden">
+        <div className="flex w-full flex-col border-t border-slate-800/80 bg-[#0D121F] lg:h-full lg:w-96 lg:shrink-0 lg:overflow-hidden lg:border-l lg:border-t-0">
           {/* Tab Navigation */}
           <div className="flex border-b border-slate-800 px-3 pt-3 gap-1 shrink-0">
             {[
@@ -452,7 +452,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 p-5 overflow-y-auto space-y-6">
+          <div className="space-y-6 p-4 sm:p-5 lg:flex-1 lg:overflow-y-auto">
             {/* 1. FRAMING TAB */}
             {activeTab === 'framing' && (
               <div className="space-y-5">

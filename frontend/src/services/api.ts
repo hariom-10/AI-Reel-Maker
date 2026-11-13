@@ -1,11 +1,12 @@
 import { Project, DashboardStats, GenerateReelsParams, ClipConfig, CleanupParams } from '../types';
 
-const API_BASE = 'https://hariomslap.tail074e1a.ts.net';
+const API_BASE = 'https://hariomslap.tail074e1a.ts.net/api';
+const BACKEND_ORIGIN = 'https://hariomslap.tail074e1a.ts.net';
 
 const normalizeMediaUrls = <T,>(value: T): T => {
   if (typeof value === 'string') {
     return (value.startsWith('/media/')
-      ? `${API_BASE}${value}`
+      ? `${BACKEND_ORIGIN}${value}`
       : value) as T;
   }
 

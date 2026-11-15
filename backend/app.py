@@ -28,7 +28,7 @@ from services.video_analyzer import probe_video, extract_thumbnail, analyze_vide
 from services.reel_generator import generate_automatic_reels
 from services.video_editor import render_clip, create_export_zip
 from services.video_cleanup import render_cleanup_video, render_cleanup_preview_frame
-from services.transcriber import whisper_available
+from services.transcriber import load_cached_transcript, transcribe_video, whisper_available
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -77,6 +77,8 @@ def run_background_analysis(project_id: str):
             project_store.save_project(project)
 
         video_path = Path(project.video_path)
+        if not math.isfinite(project.metadata.duration) or project.metadata.duration <= 0:
+            project.metadata = probe_video(video_path)
         scenes = analyze_video_scenes(video_path, project.id, progress_callback=progress_cb)
 
         if project_id in cancelled_jobs:
@@ -90,6 +92,18 @@ def run_background_analysis(project_id: str):
         project.status = "ready"
         project.progress = 100
         project.status_message = f"Analysis complete. {len(scenes)} scenes detected."
+        cached_transcript = load_cached_transcript(
+            video_path,
+            project.id,
+            project.metadata.duration,
+        )
+        if cached_transcript is None and not whisper_available():
+            project.status_message += (
+                " Whisper Base package or local weights are unavailable; "
+                "speech scoring and automatic captions are skipped."
+            )
+        elif cached_transcript is None:
+            project.status_message += " Speech transcription did not complete; speech scoring is unavailable."
         project_store.save_project(project)
     except InterruptedError:
         logger.info(f"Analysis for {project_id} cancelled.")
@@ -125,6 +139,11 @@ def run_background_generation(project_id: str, req: GenerateReelsRequest):
             project_store.save_project(project)
 
         video_path = Path(project.video_path)
+        video_duration = project.metadata.duration
+        if not math.isfinite(video_duration) or video_duration <= 0:
+            project.metadata = probe_video(video_path)
+            video_duration = project.metadata.duration
+
         if not project.scenes:
             project.scenes = analyze_video_scenes(
                 video_path,
@@ -142,9 +161,26 @@ def run_background_generation(project_id: str, req: GenerateReelsRequest):
             project_store.save_project(project)
             return
 
+        transcript = load_cached_transcript(
+            video_path,
+            project.id,
+            video_duration,
+        )
+        if transcript is None and whisper_available():
+            transcript = transcribe_video(
+                video_path,
+                project.id,
+                video_duration,
+                progress_callback=lambda percent, message: progress_cb(
+                    35 + int(percent * 0.28), message
+                ),
+            )
+        if transcript is None:
+            transcript = []
+
         clips = generate_automatic_reels(
             scenes=selected_scenes,
-            video_duration=project.metadata.duration,
+            video_duration=video_duration,
             video_path=video_path,
             project_id=project.id,
             target_count=req.target_count,
@@ -154,8 +190,9 @@ def run_background_generation(project_id: str, req: GenerateReelsRequest):
             auto_captions=req.auto_captions,
             caption_language=req.caption_language,
             caption_style=req.caption_style,
+            transcript=transcript,
             progress_callback=lambda percent, message: progress_cb(
-                35 + int(percent * 0.64), message
+                64 + int(percent * 0.35), message
             ),
         )
         if project_id in cancelled_jobs:
@@ -176,12 +213,13 @@ def run_background_generation(project_id: str, req: GenerateReelsRequest):
         project.status_message = (
             f"Generated {len(clips)} candidate reels ready for preview and editing."
         )
-        if req.auto_captions and not whisper_available():
-            project.status_message += (
-                " Captions were skipped; install optional openai-whisper to enable transcription."
-            )
-        elif req.auto_captions and any(not clip.subtitles for clip in clips):
-            project.status_message += " Some clips have no detected speech captions."
+        if req.auto_captions and not transcript:
+            if not whisper_available():
+                project.status_message += (
+                    " Captions were skipped; local Whisper Base package or weights are unavailable."
+                )
+            else:
+                project.status_message += " No speech segments were available for captions."
         project_store.save_project(project)
     except InterruptedError:
         cancelled_jobs.discard(project_id)

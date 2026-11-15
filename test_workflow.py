@@ -5,22 +5,29 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 backend_dir = Path(__file__).resolve().parent / "backend"
 sys.path.insert(0, str(backend_dir))
 
-from config import EXPORTS_DIR, TEMP_DIR, THUMBNAILS_DIR, UPLOADS_DIR
+from config import EXPORTS_DIR, FFPROBE_BIN, TEMP_DIR, THUMBNAILS_DIR, TRANSCRIPTS_DIR, UPLOADS_DIR
 from models import (
     BlurRegion,
+    CaptionConfig,
     CleanupRegion,
     CleanupRegionsRequest,
     CleanupRequest,
+    ClipConfig,
+    CropConfig,
     GenerateReelsRequest,
     Project,
+    SubtitleItem,
 )
 from services.project_store import project_store
+from services import transcriber
 from services.transcriber import whisper_available
 from services.video_analyzer import analyze_video_scenes, probe_video
+from services.reel_generator import generate_automatic_reels
 from services.video_cleanup import (
     build_cleanup_filters,
     render_cleanup_preview_frame,
@@ -33,10 +40,13 @@ from services.ffmpeg_runner import run_ffmpeg
 def run_test():
     project_id = f"workflow_{uuid.uuid4().hex[:12]}"
     test_video = TEMP_DIR / f"{project_id}.mp4"
+    silent_video = TEMP_DIR / f"{project_id}_silent.mp4"
     rendered_path = None
+    silent_rendered_path = None
     zip_path = None
     cleaned_path = None
     preview_path = None
+    transcript_cache = None
     print("=== Testing AI Reel Maker Video Workflow ===")
 
     try:
@@ -125,6 +135,8 @@ def run_test():
         print("3. Analyzing scenes...")
         scenes = analyze_video_scenes(test_video, project_id)
         assert len(scenes) >= 1
+        assert all(0.0 <= scene.score <= 1.0 for scene in scenes)
+        assert all(0.0 <= scene.visual_activity <= 1.0 for scene in scenes)
         test_project = project_store.get_project(project_id)
         test_project.scenes = scenes
         project_store.save_project(test_project)
@@ -149,7 +161,69 @@ def run_test():
             assert "Captions were skipped" in generated_project.status_message
         assert all(reel.crop_config.aspect_ratio == "9:16" for reel in reels)
         assert len({(reel.start_time, reel.end_time) for reel in reels}) == len(reels)
+        assert all(
+            0 <= reel.start_time < reel.end_time <= metadata.duration
+            and abs(reel.duration - (reel.end_time - reel.start_time)) <= 0.02
+            for reel in reels
+        )
+        for index, reel in enumerate(reels):
+            for other in reels[index + 1:]:
+                overlap = max(
+                    0.0,
+                    min(reel.end_time, other.end_time) - max(reel.start_time, other.start_time),
+                )
+                assert overlap == 0.0
         reels[0].crop_config.blur_region = BlurRegion(x=10, y=10, width=20, height=20)
+
+        no_caption_clips = generate_automatic_reels(
+            scenes=scenes,
+            video_duration=metadata.duration,
+            video_path=test_video,
+            project_id=project_id,
+            target_count=1,
+            target_duration=10,
+            auto_captions=False,
+            transcript=[],
+        )
+        assert no_caption_clips
+        assert not no_caption_clips[0].caption_config.enabled
+        assert not no_caption_clips[0].subtitles
+
+        print("4a. Testing chunked transcription offsets and cache reuse...")
+        transcript_cache = TRANSCRIPTS_DIR / f"{project_id}_offsets.json"
+
+        def fake_extract(command, duration, progress_callback=None, loglevel="error"):
+            Path(command[-1]).write_bytes(b"mock audio data larger than the wave header minimum")
+            return ""
+
+        def fake_chunk_transcription(audio_path, language, clip_start_time):
+            return [
+                SubtitleItem(
+                    id="chunk_sub",
+                    start_time=clip_start_time + 2.0,
+                    end_time=clip_start_time + 3.0,
+                    text="sample speech",
+                )
+            ]
+
+        with (
+            patch.object(transcriber, "whisper_available", return_value=True),
+            patch.object(transcriber, "_video_has_audio", return_value=True),
+            patch.object(transcriber, "run_ffmpeg", side_effect=fake_extract),
+            patch.object(transcriber, "transcribe_audio_whisper", side_effect=fake_chunk_transcription),
+        ):
+            full_transcript = transcriber.transcribe_video(
+                test_video,
+                f"{project_id}_offsets",
+                65.0,
+            )
+        assert full_transcript is not None
+        assert [item.start_time for item in full_transcript] == [2.0, 31.0, 61.0]
+        assert len(transcriber.load_cached_transcript(
+            test_video,
+            f"{project_id}_offsets",
+            65.0,
+        ) or []) == 3
 
         print("5. Rendering a reel...")
         render_progress = []
@@ -166,6 +240,64 @@ def run_test():
         rendered_metadata = probe_video(rendered_path)
         assert (rendered_metadata.width, rendered_metadata.height) == (1080, 1920)
         assert rendered_metadata.fps == 30
+        audio_probe = subprocess.run(
+            [
+                FFPROBE_BIN,
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=codec_type",
+                "-of", "csv=p=0",
+                str(rendered_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+        assert "audio" in audio_probe.stdout.splitlines()
+
+        print("5a. Testing export when the source has no audio stream...")
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=320x180:d=5",
+                "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                str(silent_video),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        silent_clip = render_clip(
+            silent_video,
+            ClipConfig(
+                clip_id="silent_audio_check",
+                title="Silent source check",
+                start_time=0,
+                end_time=5,
+                duration=5,
+                crop_config=CropConfig(aspect_ratio="9:16", mode="fit"),
+                caption_config=CaptionConfig(enabled=False),
+            ),
+            project_id,
+        )
+        assert silent_clip.status == "exported", silent_clip.error_message
+        silent_rendered_path = Path(silent_clip.output_path)
+        silent_audio_probe = subprocess.run(
+            [
+                FFPROBE_BIN,
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=codec_type",
+                "-of", "csv=p=0",
+                str(silent_rendered_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+        assert not silent_audio_probe.stdout.strip()
 
         print("6. Testing FFmpeg job cancellation...")
 
@@ -235,7 +367,16 @@ def run_test():
 
         print("All workflow checks passed.")
     finally:
-        for path in (test_video, rendered_path, zip_path, cleaned_path, preview_path):
+        for path in (
+            test_video,
+            silent_video,
+            rendered_path,
+            silent_rendered_path,
+            zip_path,
+            cleaned_path,
+            preview_path,
+            transcript_cache,
+        ):
             if path and path.exists():
                 path.unlink()
         for path in THUMBNAILS_DIR.glob(f"{project_id}_*.jpg"):

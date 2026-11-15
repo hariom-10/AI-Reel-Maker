@@ -21,10 +21,12 @@ Runs **100% locally on Windows** using **FastAPI**, **FFmpeg 8.1**, and a **Reac
 - In-modal video player to preview uploaded footage.
 
 ### 3. Scene Detection & Moment Ranking
-- Detects visual scene changes using PySceneDetect when installed, with an FFmpeg fallback.
-- Uses audio activity, scene pacing, and duration heuristics to rank candidate moments. Scores are suggestions, not a guarantee of engagement.
+- Detects scene changes with FFmpeg using a 2-fps, low-resolution analysis stream.
+- Samples small grayscale frames every two seconds to estimate visual change; this is a pixel-change signal, not semantic action recognition.
+- Uses silence-derived audio activity and, when local Whisper Base is available, real speech timestamps and density. Scores are configurable suggestions, not a guarantee of engagement.
+- The shared `HIGHLIGHT_SCORING_WEIGHTS` values in `backend/services/video_analyzer.py` tune speech, audio, visual change, duration, cut boundaries, and dialogue context for both scene and reel ranking.
 - Generates high-resolution thumbnail previews for each moment.
-- Filter scenes by: *All*, *High Audio Activity*, *High Action*, or *Selected*.
+- Filter scenes by: *All*, *High Audio Activity*, *High Visual Change*, or *Selected*.
 - Select or reject candidate scenes before reel generation.
 
 ### 4. Reel Candidate Generator
@@ -35,7 +37,7 @@ Runs **100% locally on Windows** using **FastAPI**, **FFmpeg 8.1**, and a **Reac
   - **60 seconds**
   - **Custom duration** (5s - 120s)
 - Request up to 30 reels; candidates are selected only from the chosen scenes. If the selected scenes do not contain enough separated moments, fewer clips are produced.
-- Windows are aligned to scene boundaries where possible. Dialogue-aware cut points are not guaranteed.
+- Candidate windows use transcript speech spans when available, preserve brief dialogue context, and snap to nearby scene cuts where this keeps the requested duration. Heavily overlapping candidates are skipped; fewer clips may be returned than requested.
 
 ### 5. Vertical Video Studio & Editor
 - **Aspect Ratios**:
@@ -116,11 +118,11 @@ python -m pip install -r requirements.txt
 ```
 FFmpeg and FFprobe must also be installed and available on `PATH`.
 
-Whisper is optional because it downloads a model and requires PyTorch. To enable actual local speech captions:
+Whisper is optional and requires PyTorch plus locally available Base model weights. To enable actual local speech captions:
 ```powershell
 python -m pip install -r requirements-whisper.txt
 ```
-The first caption run downloads Whisper's `base` model. Video and audio are processed locally; with Whisper absent or unavailable, caption generation reports that it was skipped and does not invent text.
+The application does not automatically download model weights. Install or place the Base weights in Whisper's normal local cache yourself before enabling it. Full-video transcription is processed in 30-second audio chunks, saved under `backend/data/transcripts/`, and reused for analysis, captioning, and reel generation. English and Hindi are supported through Whisper's language detection; Hinglish accuracy varies and is not guaranteed. Without the package or local weights, speech scoring and captions are skipped rather than fabricated.
 
 Generate a synthetic starter project, without replacing an existing demo by default:
 ```powershell
@@ -146,7 +148,7 @@ AI reel maker/
 │   │   ├── video_cleanup.py   # Authorized FFmpeg region edits
 │   │   ├── ffmpeg_runner.py   # FFmpeg progress and cancellation
 │   │   └── project_store.py   # Local JSON persistence
-│   └── data/                  # Local storage (uploads, exports, thumbnails, projects)
+│   └── data/                  # Local storage (uploads, exports, thumbnails, projects, transcript cache)
 │
 ├── frontend/
 │   ├── src/
@@ -186,8 +188,9 @@ AI reel maker/
 
 ## Current processing limits
 
-- Scene selection uses visual cuts and audio-activity heuristics; semantic dialogue understanding and engagement prediction are not provided.
-- Automatic captions require optional local Whisper installation and model download.
+- Scene scores combine speech density when available, audio activity, sampled visual change, scene duration, scene boundaries, and dialogue context. They do not identify emotion, comedy, action, or story meaning.
+- FFmpeg still decodes the source video to analyze it; low-resolution sampling reduces downstream frame work and memory, but analysis time depends on source codec, resolution, and CPU.
+- Whisper Base is CPU-compatible but full-movie transcription can take hours on a laptop. It runs one short audio chunk at a time; it requires the optional package and weights already present locally and will not fetch them automatically.
 - Smart crop is a centered crop with manual horizontal adjustment; face-aware tracking is not implemented.
 - Cleanup is a spatial FFmpeg approximation. It does not reconstruct missing content with a generative model or track moving marks.
 - Generated clip count can be lower than requested when the selected moments overlap or are too short.

@@ -21,14 +21,14 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
   onReAnalyze,
   isAnalyzing,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'high_audio' | 'high_action' | 'selected'>('all');
+  const [filter, setFilter] = useState<'all' | 'high_audio' | 'high_visual_change' | 'selected'>('all');
 
   const scenes = project.scenes || [];
 
   const filteredScenes = scenes.filter((scene) => {
     if (filter === 'selected') return scene.selected;
     if (filter === 'high_audio') return scene.audio_activity >= 0.7;
-    if (filter === 'high_action') return scene.visual_activity >= 0.5;
+    if (filter === 'high_visual_change') return scene.visual_activity >= 0.5;
     return true;
   });
 
@@ -50,13 +50,13 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
           </div>
           <div>
             <h3 className="flex flex-wrap items-center gap-2 text-sm font-bold text-white">
-              Detected AI Scenes & Moments
+              Detected Scenes & Moments
               <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-mono">
                 {scenes.length} Scenes
               </span>
             </h3>
             <p className="text-xs text-slate-400 font-medium">
-              Ranked by dialogue density and visual dynamics. Select scenes to convert to vertical reels.
+              Ranked using speech when local Whisper is available, audio activity, and sampled visual changes—not emotion or action recognition.
             </p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
       {/* Filter Chips & Selection Bar */}
       <div className="flex flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          {(['all', 'high_audio', 'high_action', 'selected'] as const).map((tab) => (
+          {(['all', 'high_audio', 'high_visual_change', 'selected'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
@@ -95,7 +95,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                   : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
-              {tab.replace('_', ' ')}
+              {tab === 'high_visual_change' ? 'high visual change' : tab.replace('_', ' ')}
             </button>
           ))}
         </div>
@@ -220,7 +220,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                       <div className="flex justify-between text-[10px] font-semibold text-slate-400">
                         <span className="flex items-center gap-1">
                           <Eye className="w-3 h-3 text-violet-400" />
-                          Visual Dynamics
+                          Sampled Visual Change
                         </span>
                         <span className="font-mono">{Math.round(scene.visual_activity * 100)}%</span>
                       </div>

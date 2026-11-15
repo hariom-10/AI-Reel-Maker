@@ -8,9 +8,18 @@ PROJECTS_DIR = DATA_DIR / "projects"
 EXPORTS_DIR = DATA_DIR / "exports"
 THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 TEMP_DIR = DATA_DIR / "temp"
+TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 
 # Ensure all critical storage directories exist
-for directory in [DATA_DIR, UPLOADS_DIR, PROJECTS_DIR, EXPORTS_DIR, THUMBNAILS_DIR, TEMP_DIR]:
+for directory in [
+    DATA_DIR,
+    UPLOADS_DIR,
+    PROJECTS_DIR,
+    EXPORTS_DIR,
+    THUMBNAILS_DIR,
+    TEMP_DIR,
+    TRANSCRIPTS_DIR,
+]:
     directory.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".flv", ".ts", ".m4v"}

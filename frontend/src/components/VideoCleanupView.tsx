@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Eraser, ShieldAlert, Sparkles, Play, Pause, Eye, Plus, Trash2,
   Download, CheckCircle2, Layers, Loader2, Save
@@ -26,6 +26,12 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
   const [activeRegionId, setActiveRegionId] = useState<string>(regions[0]?.id || '');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [videoContentBounds, setVideoContentBounds] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   // Before / After inspection
   const [previewMode, setPreviewMode] = useState<'original' | 'inpaint_preview'>('original');
@@ -49,6 +55,47 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
   } | null>(null);
 
   const activeRegion = regions.find((r) => r.id === activeRegionId) || regions[0];
+  const getVideoContentBounds = useCallback(() => {
+    const video = videoRef.current;
+    const container = containerRef.current;
+
+    if (!video || !container || !video.videoWidth || !video.videoHeight) {
+      return null;
+    }
+
+    const videoRect = video.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+
+    const scale = Math.min(
+      videoRect.width / video.videoWidth,
+      videoRect.height / video.videoHeight
+    );
+
+    const width = video.videoWidth * scale;
+    const height = video.videoHeight * scale;
+
+    return {
+      left:
+        videoRect.left - containerRect.left - container.clientLeft +
+        (videoRect.width - width) / 2,
+      top:
+        videoRect.top - containerRect.top - container.clientTop +
+        (videoRect.height - height) / 2,
+      width,
+      height,
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateBounds = () => setVideoContentBounds(getVideoContentBounds());
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(container);
+    updateBounds();
+    return () => observer.disconnect();
+  }, [getVideoContentBounds]);
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
@@ -296,6 +343,8 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
                 ref={videoRef}
                 src={project.video_url}
                 playsInline
+                onLoadStart={() => setVideoContentBounds(null)}
+                onLoadedMetadata={() => setVideoContentBounds(getVideoContentBounds())}
                 onTimeUpdate={handleTimeUpdate}
                 onClick={togglePlay}
                 className="w-full h-full object-contain cursor-pointer"
@@ -303,7 +352,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
             )}
 
             {/* Interactive Bounding Boxes Overlay */}
-            {previewMode === 'original' &&
+            {previewMode === 'original' && videoContentBounds &&
               regions.map((reg) => {
                 const isActive = reg.id === activeRegionId;
                 return (
@@ -324,7 +373,7 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
                     }}
                     onPointerMove={(event) => {
                       const drag = dragRef.current;
-                      const bounds = containerRef.current?.getBoundingClientRect();
+                      const bounds = getVideoContentBounds();
                       if (!drag || drag.id !== reg.id || !bounds) return;
                       const x = Math.max(0, Math.min(100 - reg.width,
                         drag.originX + ((event.clientX - drag.pointerX) / bounds.width) * 100));
@@ -342,10 +391,10 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
                         : 'border-cyan-400/70 bg-cyan-500/10 hover:border-cyan-400'
                     }`}
                     style={{
-                      left: `${reg.x}%`,
-                      top: `${reg.y}%`,
-                      width: `${reg.width}%`,
-                      height: `${reg.height}%`,
+                      left: `${videoContentBounds.left + (reg.x / 100) * videoContentBounds.width}px`,
+                      top: `${videoContentBounds.top + (reg.y / 100) * videoContentBounds.height}px`,
+                      width: `${(reg.width / 100) * videoContentBounds.width}px`,
+                      height: `${(reg.height / 100) * videoContentBounds.height}px`,
                       touchAction: 'none',
                     }}
                   >

@@ -154,6 +154,8 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
     }
     try {
       setIsPreviewLoading(true);
+      videoRef.current?.pause();
+      setIsPlaying(false);
       const res = await api.previewCleanupFrame(
         project.id,
         { regions, authorization_confirmed: authConfirmed },
@@ -331,23 +333,35 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
             ref={containerRef}
             className="relative aspect-video rounded-3xl bg-black overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center group"
           >
-            {/* Display either Video or Inpainted Preview Frame */}
-            {previewMode === 'inpaint_preview' && previewFrameUrl ? (
+            <video
+              ref={videoRef}
+              src={project.video_url}
+              playsInline
+              onLoadStart={() => setVideoContentBounds(null)}
+              onLoadedMetadata={() => setVideoContentBounds(getVideoContentBounds())}
+              onTimeUpdate={handleTimeUpdate}
+              onClick={togglePlay}
+              className={`w-full h-full object-contain ${
+                previewMode === 'original'
+                  ? 'cursor-pointer'
+                  : 'pointer-events-none opacity-0'
+              }`}
+            />
+
+            {/* Match the preview image to the displayed source-video bounds. */}
+            {previewMode === 'inpaint_preview' && previewFrameUrl && (
               <img
                 src={previewFrameUrl}
                 alt="Edited Region Preview"
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <video
-                ref={videoRef}
-                src={project.video_url}
-                playsInline
-                onLoadStart={() => setVideoContentBounds(null)}
-                onLoadedMetadata={() => setVideoContentBounds(getVideoContentBounds())}
-                onTimeUpdate={handleTimeUpdate}
-                onClick={togglePlay}
-                className="w-full h-full object-contain cursor-pointer"
+                className={`absolute ${
+                  videoContentBounds ? 'object-fill' : 'inset-0 h-full w-full object-contain'
+                }`}
+                style={videoContentBounds ? {
+                  left: `${videoContentBounds.left}px`,
+                  top: `${videoContentBounds.top}px`,
+                  width: `${videoContentBounds.width}px`,
+                  height: `${videoContentBounds.height}px`,
+                } : undefined}
               />
             )}
 

@@ -4,10 +4,13 @@ import os
 import subprocess
 import tempfile
 import uuid
+from fractions import Fraction
 from pathlib import Path
 from typing import List, Optional, Callable
 
-from config import FFMPEG_BIN, EXPORTS_DIR, THUMBNAILS_DIR
+from PIL import Image
+
+from config import FFMPEG_BIN, FFPROBE_BIN, EXPORTS_DIR, THUMBNAILS_DIR
 from models import CleanupRegion, VideoMetadata
 from services.ffmpeg_runner import run_ffmpeg
 
@@ -16,6 +19,131 @@ logger = logging.getLogger(__name__)
 LAMA_PYTHON = Path(r"C:\AI-Models\LaMa\venv\Scripts\python.exe")
 LAMA_SCRIPT = Path(r"C:\AI-Models\LaMa\lama_video_frames.py")
 LAMA_MODEL = Path(r"C:\AI-Models\LaMa\models\big-lama.pt")
+
+
+def _parse_ratio(value: Optional[str]) -> Optional[Fraction]:
+    if not value or value in {"N/A", "0:1", "0/0"}:
+        return None
+    try:
+        return Fraction(value.replace(":", "/"))
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _probe_cleanup_media(path: Path) -> dict:
+    result = subprocess.run(
+        [
+            FFPROBE_BIN,
+            "-v", "error",
+            "-show_streams",
+            "-show_format",
+            "-of", "json",
+            str(path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    data = json.loads(result.stdout)
+    video = next(
+        (stream for stream in data["streams"] if stream.get("codec_type") == "video"),
+        None,
+    )
+    if video is None:
+        raise RuntimeError(f"No video stream found in cleanup media: {path}")
+
+    width = int(video["width"])
+    height = int(video["height"])
+    sample_aspect_ratio = _parse_ratio(video.get("sample_aspect_ratio")) or Fraction(1, 1)
+    display_aspect_ratio = _parse_ratio(video.get("display_aspect_ratio"))
+    if display_aspect_ratio is None:
+        display_aspect_ratio = Fraction(width, height) * sample_aspect_ratio
+
+    frame_rate = _parse_ratio(video.get("avg_frame_rate"))
+    if frame_rate is None:
+        frame_rate = _parse_ratio(video.get("r_frame_rate"))
+
+    duration_value = video.get("duration") or data.get("format", {}).get("duration")
+    return {
+        "width": width,
+        "height": height,
+        "sample_aspect_ratio": sample_aspect_ratio,
+        "display_aspect_ratio": display_aspect_ratio,
+        "frame_rate": frame_rate,
+        "duration": float(duration_value) if duration_value else 0.0,
+        "has_audio": any(
+            stream.get("codec_type") == "audio" for stream in data["streams"]
+        ),
+    }
+
+
+def _restore_lama_frame_dimensions(input_path: Path, output_path: Path) -> None:
+    with Image.open(input_path) as source:
+        source_size = source.size
+    with Image.open(output_path) as processed:
+        output_size = processed.size
+        if output_size == source_size:
+            return
+
+        extra_width = output_size[0] - source_size[0]
+        extra_height = output_size[1] - source_size[1]
+        if (
+            extra_width < 0
+            or extra_height < 0
+            or extra_width >= 8
+            or extra_height >= 8
+        ):
+            raise RuntimeError(
+                f"LaMa changed frame dimensions from {source_size} to {output_size}."
+            )
+
+        # SimpleLama pads only the right and bottom edges to its 8-pixel grid.
+        restored = processed.crop((0, 0, source_size[0], source_size[1]))
+    restored.save(output_path)
+
+    with Image.open(output_path) as restored:
+        if restored.size != source_size:
+            raise RuntimeError(
+                f"Could not restore source frame dimensions {source_size}; "
+                f"got {restored.size}."
+            )
+
+
+def _validate_cleanup_output(source_path: Path, output_path: Path) -> None:
+    source = _probe_cleanup_media(source_path)
+    output = _probe_cleanup_media(output_path)
+
+    if (output["width"], output["height"]) != (source["width"], source["height"]):
+        raise RuntimeError(
+            "Cleanup changed video frame dimensions: "
+            f"{source['width']}x{source['height']} -> "
+            f"{output['width']}x{output['height']}."
+        )
+    if output["display_aspect_ratio"] != source["display_aspect_ratio"]:
+        raise RuntimeError(
+            "Cleanup changed the video's display aspect ratio: "
+            f"{source['display_aspect_ratio']} -> {output['display_aspect_ratio']}."
+        )
+    if source["frame_rate"] and output["frame_rate"]:
+        if abs(float(output["frame_rate"] - source["frame_rate"])) > 0.001:
+            raise RuntimeError(
+                "Cleanup changed the video's average frame rate: "
+                f"{source['frame_rate']} -> {output['frame_rate']}."
+            )
+    if source["duration"] and output["duration"]:
+        frame_tolerance = (
+            1.0 / float(source["frame_rate"])
+            if source["frame_rate"]
+            else 0.05
+        )
+        if abs(output["duration"] - source["duration"]) > max(0.05, frame_tolerance):
+            raise RuntimeError(
+                "Cleanup changed the video duration: "
+                f"{source['duration']:.3f}s -> {output['duration']:.3f}s."
+            )
+    if output["has_audio"] != source["has_audio"]:
+        raise RuntimeError("Cleanup did not preserve the source video's audio stream.")
 
 
 def _drawtext_font_option() -> str:
@@ -194,12 +322,15 @@ def _run_lama_frames(
         if return_code != 0:
             raise RuntimeError(f"LaMa frame processing failed (exit code {return_code}).")
 
-        expected = list(input_dir.glob("frame_*.png"))
-        produced = list(output_dir.glob("frame_*.png"))
-        if not expected or len(produced) != len(expected):
+        expected = sorted(input_dir.glob("frame_*.png"))
+        produced = {path.name: path for path in output_dir.glob("frame_*.png")}
+        if not expected or {path.name for path in expected} != set(produced):
             raise RuntimeError(
-                f"LaMa output frame count mismatch: expected {len(expected)}, got {len(produced)}."
+                f"LaMa output frame set mismatch: expected {len(expected)}, "
+                f"got {len(produced)}."
             )
+        for input_frame in expected:
+            _restore_lama_frame_dimensions(input_frame, produced[input_frame.name])
 
     except BaseException:
         if process is not None and process.poll() is None:
@@ -225,6 +356,7 @@ def _render_lama_video(
     """Extract frames, inpaint sequentially with LaMa, then encode with original audio."""
     inpaint = _inpaint_regions(regions)
     other_regions = _non_inpaint_regions(regions)
+    source_info = _probe_cleanup_media(video_path)
 
     with tempfile.TemporaryDirectory(
         prefix="lama_cleanup_",
@@ -266,16 +398,18 @@ def _render_lama_video(
             85,
         )
 
-        fps = metadata.fps if metadata.fps > 0 else 30.0
+        frame_rate = source_info["frame_rate"] or Fraction(
+            str(metadata.fps if metadata.fps > 0 else 30.0)
+        )
         filtergraph = build_cleanup_filters(
             other_regions,
-            metadata.width if metadata.width > 0 else 1920,
-            metadata.height if metadata.height > 0 else 1080,
+            source_info["width"],
+            source_info["height"],
         )
 
         encode_cmd = [
             FFMPEG_BIN, "-y",
-            "-framerate", str(fps),
+            "-framerate", f"{frame_rate.numerator}/{frame_rate.denominator}",
             "-i", str(output_dir / "frame_%08d.png"),
             "-i", str(video_path),
             "-filter_complex", filtergraph,
@@ -287,6 +421,9 @@ def _render_lama_video(
             "-c:a", "aac",
             "-shortest",
             "-movflags", "+faststart",
+            "-aspect",
+            f"{source_info['display_aspect_ratio'].numerator}:"
+            f"{source_info['display_aspect_ratio'].denominator}",
             str(temp_output_path),
         ]
 
@@ -304,6 +441,7 @@ def _render_lama_video(
     if not temp_output_path.exists() or temp_output_path.stat().st_size <= 1000:
         raise RuntimeError("FFmpeg did not create a valid AI-cleaned video.")
 
+    _validate_cleanup_output(video_path, temp_output_path)
     temp_output_path.replace(output_path)
     return output_path
 
@@ -334,8 +472,9 @@ def render_cleanup_video(
                 progress_callback,
             )
 
-        width = metadata.width if metadata.width > 0 else 1920
-        height = metadata.height if metadata.height > 0 else 1080
+        source_info = _probe_cleanup_media(video_path)
+        width = source_info["width"]
+        height = source_info["height"]
         filtergraph = build_cleanup_filters(regions, width, height)
 
         cmd = [
@@ -350,6 +489,9 @@ def render_cleanup_video(
             "-crf", "19",
             "-c:a", "aac",
             "-movflags", "+faststart",
+            "-aspect",
+            f"{source_info['display_aspect_ratio'].numerator}:"
+            f"{source_info['display_aspect_ratio'].denominator}",
             str(temp_output_path),
         ]
 
@@ -361,6 +503,7 @@ def render_cleanup_video(
         if not temp_output_path.exists() or temp_output_path.stat().st_size <= 1000:
             raise RuntimeError("FFmpeg did not create a valid edited video.")
 
+        _validate_cleanup_output(video_path, temp_output_path)
         temp_output_path.replace(output_path)
         if progress_callback:
             progress_callback(100, "Edited video rendered successfully.")
@@ -383,8 +526,9 @@ def render_cleanup_preview_frame(
     preview_filename = f"{project_id}_cleanup_preview.jpg"
     output_path = THUMBNAILS_DIR / preview_filename
 
-    width = metadata.width if metadata.width > 0 else 1920
-    height = metadata.height if metadata.height > 0 else 1080
+    source_info = _probe_cleanup_media(video_path)
+    width = source_info["width"]
+    height = source_info["height"]
     inpaint = _inpaint_regions(regions)
     other_regions = _non_inpaint_regions(regions)
 
@@ -436,6 +580,12 @@ def render_cleanup_preview_frame(
                     stderr=subprocess.PIPE,
                     check=True,
                 )
+                with Image.open(output_path) as preview:
+                    if preview.size != (width, height):
+                        raise RuntimeError(
+                            "Cleanup preview changed frame dimensions: "
+                            f"{width}x{height} -> {preview.width}x{preview.height}."
+                        )
         else:
             filtergraph = build_cleanup_filters(regions, width, height)
             cmd = [
@@ -455,6 +605,12 @@ def render_cleanup_preview_frame(
                 stderr=subprocess.PIPE,
                 check=True,
             )
+            with Image.open(output_path) as preview:
+                if preview.size != (width, height):
+                    raise RuntimeError(
+                        "Cleanup preview changed frame dimensions: "
+                        f"{width}x{height} -> {preview.width}x{preview.height}."
+                    )
 
         if output_path.exists():
             return f"/media/thumbnails/{preview_filename}"

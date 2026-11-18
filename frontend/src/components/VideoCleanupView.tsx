@@ -183,10 +183,11 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
       setIsProcessing(true);
       setStatusMsg('Starting authorized region cleanup in the background...');
 
-      await api.triggerCleanup(project.id, {
+      const result = await api.triggerCleanup(project.id, {
         regions,
         authorization_confirmed: true,
       });
+      onUpdateProject(result.project);
 
       // Poll until done
       const interval = setInterval(async () => {
@@ -225,7 +226,8 @@ export const VideoCleanupView: React.FC<VideoCleanupViewProps> = ({
   };
 
   const cleanupOperations: { id: CleanupRegion['type']; label: string }[] = [
-    { id: 'inpaint', label: 'Spatial Delogo' },
+    { id: 'inpaint', label: 'AI Inpaint' },
+    { id: 'delogo', label: 'Spatial Delogo' },
     { id: 'blur', label: 'Blur Region' },
     { id: 'replace_logo', label: 'Replace with Text' },
     { id: 'add_text', label: 'Add Custom Text' },

@@ -664,6 +664,8 @@ def trigger_video_cleanup(
         raise HTTPException(status_code=400, detail="At least one cleanup region must be specified.")
 
     cancelled_jobs.discard(project_id)
+    proj.cleaned_video_path = ""
+    proj.cleaned_video_url = ""
     proj.status = "cleaning"
     proj.progress = 5
     proj.status_message = "Starting authorized region edit..."

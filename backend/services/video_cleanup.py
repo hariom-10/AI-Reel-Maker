@@ -202,9 +202,9 @@ def build_cleanup_filters(regions: List[CleanupRegion], width: int, height: int)
             filters.append(txt_filter)
             current_label = next_label
 
-        elif reg.type == "replace_logo":
+        elif reg.type in {"delogo", "replace_logo"}:
             delogo = f"{current_label}delogo=x={rx}:y={ry}:w={rw}:h={rh}:show=0"
-            if reg.replacement_text:
+            if reg.type == "replace_logo" and reg.replacement_text:
                 clean_text = _escape_drawtext(reg.replacement_text)
                 txt = (
                     f"{delogo},drawtext={_drawtext_font_option()}:"

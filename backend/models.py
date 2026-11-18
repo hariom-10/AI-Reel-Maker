@@ -73,7 +73,7 @@ class ClipConfig(BaseModel):
 
 class CleanupRegion(BaseModel):
     id: str
-    type: Literal["inpaint", "blur", "replace_logo", "add_text"] = "inpaint"
+    type: Literal["inpaint", "delogo", "blur", "replace_logo", "add_text"] = "inpaint"
     x: float = Field(default=10.0, ge=0, le=100, allow_inf_nan=False)
     y: float = Field(default=10.0, ge=0, le=100, allow_inf_nan=False)
     width: float = Field(default=20.0, gt=0, le=100, allow_inf_nan=False)

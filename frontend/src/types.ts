@@ -77,7 +77,7 @@ export interface ClipConfig {
 
 export interface CleanupRegion {
   id: string;
-  type: "inpaint" | "blur" | "replace_logo" | "add_text";
+  type: "inpaint" | "delogo" | "blur" | "replace_logo" | "add_text";
   x: number;      // 0-100 percentage
   y: number;
   width: number;

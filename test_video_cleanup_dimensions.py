@@ -3,16 +3,19 @@ import subprocess
 import sys
 import unittest
 import uuid
+from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
+from fastapi import BackgroundTasks
 
 backend_dir = Path(__file__).resolve().parent / "backend"
 sys.path.insert(0, str(backend_dir))
 
 from config import EXPORTS_DIR, FFPROBE_BIN, TEMP_DIR, THUMBNAILS_DIR
-from models import CleanupRegion
+from models import CleanupRegion, CleanupRequest, Project
+from services.project_store import project_store
 from services.video_analyzer import probe_video
 from services.video_cleanup import (
     LAMA_MODEL,
@@ -53,6 +56,97 @@ def _media_properties(path: Path) -> dict:
 
 
 class VideoCleanupDimensionTests(unittest.TestCase):
+    def test_delogo_removes_selected_watermark_from_rendered_output(self):
+        project_id = f"delogo_{uuid.uuid4().hex[:12]}"
+        source = TEMP_DIR / f"{project_id}.mp4"
+        output_frame = TEMP_DIR / f"{project_id}_output.png"
+        source_frame = TEMP_DIR / f"{project_id}_source.png"
+        project_file = project_store.storage_dir / f"{project_id}.json"
+
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-f", "lavfi",
+                    "-i", "color=c=black:s=320x180:r=2:d=2",
+                    "-vf", "drawbox=x=128:y=72:w=64:h=36:color=white:t=fill",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    str(source),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            regions = [
+                CleanupRegion(
+                    id="watermark",
+                    type="delogo",
+                    x=40,
+                    y=40,
+                    width=20,
+                    height=20,
+                )
+            ]
+            project_store.save_project(
+                Project(
+                    id=project_id,
+                    name="Delogo regression",
+                    created_at=datetime.now().isoformat(),
+                    updated_at=datetime.now().isoformat(),
+                    video_filename=source.name,
+                    video_path=str(source),
+                    video_url=f"/media/uploads/{source.name}",
+                    metadata=probe_video(source),
+                    status="ready",
+                    cleaned_video_url="/media/exports/previous-cleaned.mp4",
+                    cleaned_video_path="previous-cleaned.mp4",
+                )
+            )
+            from app import run_background_cleanup, trigger_video_cleanup
+
+            started = trigger_video_cleanup(
+                project_id,
+                CleanupRequest(regions=regions, authorization_confirmed=True),
+                BackgroundTasks(),
+            )
+            self.assertEqual(started["project"].cleaned_video_url, "")
+            run_background_cleanup(project_id, regions)
+            completed = project_store.get_project(project_id)
+            self.assertEqual(completed.status_message, "Region cleanup finished successfully.")
+            self.assertEqual(
+                completed.cleaned_video_url,
+                f"/media/exports/{project_id}_cleaned.mp4",
+            )
+            cleaned = Path(completed.cleaned_video_path)
+            self.assertTrue(cleaned.is_file())
+
+            for path, frame in ((source, source_frame), (cleaned, output_frame)):
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y",
+                        "-i", str(path),
+                        "-frames:v", "1",
+                        str(frame),
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+            with Image.open(source_frame) as original, Image.open(output_frame) as output:
+                difference = ImageChops.difference(
+                    original.convert("RGB").crop((128, 72, 192, 108)),
+                    output.convert("RGB").crop((128, 72, 192, 108)),
+                )
+                self.assertGreater(ImageStat.Stat(difference).mean[0], 20)
+            self.assertEqual(cleaned.name, f"{project_id}_cleaned.mp4")
+        finally:
+            source.unlink(missing_ok=True)
+            output_frame.unlink(missing_ok=True)
+            source_frame.unlink(missing_ok=True)
+            (EXPORTS_DIR / f"{project_id}_cleaned.mp4").unlink(missing_ok=True)
+            project_file.unlink(missing_ok=True)
+
     def test_inpaint_preserves_anamorphic_4_3_dimensions_aspect_and_audio(self):
         if not all(path.is_file() for path in (LAMA_PYTHON, LAMA_SCRIPT, LAMA_MODEL)):
             self.skipTest("The configured local LaMa environment is unavailable.")
